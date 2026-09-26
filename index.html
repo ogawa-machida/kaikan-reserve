@@ -720,21 +720,29 @@ function viewForm(){
     <button class="btn" onclick="signIn()">ログイン・アカウント作成</button></section>`;
   const me = S.me, active = !S.adminEntry && isActiveUser();
   if (!S.adminEntry && me && me.status === "rejected") return head + `<section class="card"><p style="margin:0">利用者登録が承認されていないため、Webからは申し込めません。${esc(HALL.contact)}。</p></section>`;
-  const base = S.adminEntry || active ? {} : {group:me?.group, name:me?.name || S.user?.displayName, tel:me?.tel, email:me?.email || S.user?.email};
+  const base = S.adminEntry ? {} : active ? lastRespForm() : {group:me?.group, name:me?.name || S.user?.displayName, tel:me?.tel, email:me?.email || S.user?.email, ...lastRespForm()};
   const f = {...base, ...S.form}, v = k => esc(f[k] || "");
   const needGroup = S.cat === "C" || S.cat === "D";
   const profile = active
-    ? `<section class="card"><h2>利用者</h2><dl class="kv"><dt>団体名</dt><dd>${esc(me.group || "（個人）")}</dd><dt>代表者</dt><dd>${esc(me.name)}</dd><dt>電話</dt><dd>${esc(me.tel)}</dd>${me.email ? `<dt>メール</dt><dd>${esc(me.email)}</dd>` : ""}</dl>
+    ? `<section class="card"><h2>使用団体</h2><dl class="kv"><dt>団体名</dt><dd>${esc(me.group || "（個人）")}</dd><dt>代表者</dt><dd>${esc(me.name)}</dd><dt>電話</dt><dd>${esc(me.tel)}</dd>${me.email ? `<dt>メール</dt><dd>${esc(me.email)}</dd>` : ""}</dl>
        <p class="hint" style="margin:0">登録内容の変更は管理人へご連絡ください。</p></section>`
-    : `<section class="card"><h2>${S.adminEntry ? "申込者" : "利用者登録の内容"}</h2>
-       ${S.adminEntry ? "" : `<p class="hint" style="margin-top:0">この内容で利用者登録を申請します。管理人が承認すると登録完了となり、次からは入力なしで申し込めて、すぐに予約確定になります。</p>`}
+    : `<section class="card"><h2>使用団体</h2>
+       ${S.adminEntry ? "" : `<p class="hint" style="margin-top:0">この内容で利用者登録を申請します。管理人が承認すると登録完了となり、次からは入力なしで申し込めて、すぐに予約確定になります。当日の使用責任者も、前回の内容が自動で入ります。</p>`}
        <div class="field"><label for="f_group">団体名${needGroup ? "<em>必須</em>" : "<em style='color:var(--sub)'>個人の場合は空欄</em>"}</label><input id="f_group" value="${v("group")}" autocomplete="organization"></div>
        <div class="grid2">
          <div class="field"><label for="f_name">代表者の氏名<em>必須</em></label><input id="f_name" value="${v("name")}" autocomplete="name"></div>
          <div class="field"><label for="f_tel">電話番号<em>必須</em></label><input id="f_tel" type="tel" value="${v("tel")}" autocomplete="tel" inputmode="tel"></div>
        </div>
        <div class="field"><label for="f_email">メールアドレス</label><input id="f_email" type="email" value="${v("email")}" autocomplete="email"></div></section>`;
-  return head + profile + `<section class="card"><h2>利用内容</h2>
+  const resp = `<section class="card"><h2>当日の使用責任者</h2>
+    <p class="hint" style="margin:0 0 10px">当日、会館で鍵の受け取りや片付けの確認をする方です。${!S.adminEntry && me?.lastResp ? "前回の内容を入れてあります。違う方のときは書き換えてください。" : "一度入力すると、次からはこの内容が自動で入ります。"}</p>
+    <div class="field"><label for="r_address">住所<em>必須</em></label><input id="r_address" value="${v("r_address")}" autocomplete="street-address" placeholder="例 町田市小川○丁目○番○号"></div>
+    <div class="grid2">
+      <div class="field"><label for="r_name">氏名<em>必須</em></label><input id="r_name" value="${v("r_name")}" autocomplete="name"></div>
+      <div class="field"><label for="r_tel">電話番号<em>必須</em></label><input id="r_tel" type="tel" value="${v("r_tel")}" autocomplete="tel" inputmode="tel" placeholder="当日つながる番号"></div>
+    </div>
+    <div class="field"><label for="r_email">メールアドレス</label><input id="r_email" type="email" value="${v("r_email")}" autocomplete="email"></div></section>`;
+  return head + profile + resp + `<section class="card"><h2>利用内容</h2>
     <div class="grid2">
       <div class="field"><label for="f_purpose">利用目的<em>必須</em></label><input id="f_purpose" value="${v("purpose")}" placeholder="例 体操教室、定例会"></div>
       <div class="field"><label for="f_people">人数（予定）</label><input id="f_people" type="number" min="1" inputmode="numeric" value="${v("people")}"></div>
@@ -742,6 +750,10 @@ function viewForm(){
     <div class="field"><label for="f_note">連絡事項</label><textarea id="f_note" placeholder="準備で早めに入りたい、備品を使いたい など">${v("note")}</textarea></div>
     <label class="check"><input type="checkbox" id="f_agree"><span>使用後は清掃・片付けをし、管理人の確認を受けます。使用料は予約確定後にお支払いします。</span></label>
     <button class="btn wide" onclick="submitRequest(this)">${S.adminEntry || active ? "この内容で申し込む" : "仮予約して利用者登録を申請する"}</button></section>`;
+}
+function lastRespForm(){
+  const r = S.me && S.me.lastResp; if (!r || S.adminEntry) return {};
+  return {r_address:r.address || "", r_name:r.name || "", r_tel:r.tel || "", r_email:r.email || ""};
 }
 function buildUpdate(id, req){
   const up = {};
@@ -764,10 +776,14 @@ async function submitRequest(btn){
   const me = S.me, active = !S.adminEntry && isActiveUser();
   const f = active ? {group:me.group || "", name:me.name, tel:me.tel, email:me.email || ""} : {group:g("f_group"), name:g("f_name"), tel:g("f_tel"), email:g("f_email")};
   Object.assign(f, {purpose:g("f_purpose"), people:g("f_people"), note:g("f_note")});
-  S.form = active ? {purpose:f.purpose, people:f.people, note:f.note} : f;
+  const resp = {address:g("r_address"), name:g("r_name"), tel:g("r_tel"), email:g("r_email")};
+  const rf = {r_address:resp.address, r_name:resp.name, r_tel:resp.tel, r_email:resp.email};
+  S.form = active ? {purpose:f.purpose, people:f.people, note:f.note, ...rf} : {...f, ...rf};
   const miss = [];
   if (!active && (S.cat === "C" || S.cat === "D") && !f.group) miss.push("団体名");
-  if (!f.name) miss.push("代表者の氏名"); if (!f.tel) miss.push("電話番号"); if (!f.purpose) miss.push("利用目的");
+  if (!f.name) miss.push("代表者の氏名"); if (!f.tel) miss.push("電話番号");
+  if (!resp.address) miss.push("使用責任者の住所"); if (!resp.name) miss.push("使用責任者の氏名"); if (!resp.tel) miss.push("使用責任者の電話番号");
+  if (!f.purpose) miss.push("利用目的");
   if (miss.length) return toast(`${miss.join("・")}を入力してください`);
   if (!$("#f_agree").checked) return toast("使用後の片付けについての確認にチェックを入れてください");
   if (!S.adminEntry && !S.user) return signIn();
@@ -783,9 +799,10 @@ async function submitRequest(btn){
     const id = genId(), no = await genNo(), fee = calcFee(S.cat, cells, S.days);
     const req = clean({no, createdAt:now, source:S.adminEntry ? "窓口" : "Web", uid:S.adminEntry ? null : S.user.uid,
       cat:S.cat, date:S.date, date2:dates[1] || null, cells, days:1,
-      fee, ...f, status, approvedAt:status === "approved" ? now : null});
+      fee, ...f, resp, status, approvedAt:status === "approved" ? now : null});
     const up = buildUpdate(id, req);
-    if (status === "tentative") up[`users/${S.user.uid}`] = clean({group:f.group, name:f.name, tel:f.tel, email:f.email, cat:S.cat, status:"pending", createdAt:me?.createdAt || now, updatedAt:now});
+    if (status === "approved" && !S.adminEntry) up[`users/${S.user.uid}/lastResp`] = resp;
+    if (status === "tentative") up[`users/${S.user.uid}`] = clean({group:f.group, name:f.name, tel:f.tel, email:f.email, lastResp:resp, cat:S.cat, status:"pending", createdAt:me?.createdAt || now, updatedAt:now});
     await store.update(up);
     S.lastReq = req; S.sel = new Set(); S.form = {};
     go("done");
@@ -1055,6 +1072,7 @@ const RULES = `"${ROOT}": {
     ".read": "auth != null && ${A_}",
     "$uid": {
       ".read": "auth != null && auth.uid === $uid",
+      "lastResp": { ".write": "auth != null && auth.uid === $uid" },
       ".write": "auth != null && (${A_} || (auth.uid === $uid && ((newData.child('status').val() === 'pending' && (!data.exists() || data.child('status').val() === 'pending')) || (!data.exists() && newData.child('status').val() === 'active' && auth.token.email_verified === true && newData.child('cat').val() === root.child('${ROOT}/rosterByEmail/' + auth.token.email.toLowerCase().replace('.', ',') + '/cat').val()))))"
     }
   },
@@ -1194,6 +1212,7 @@ function openDetail(id){
     <dt>代表者</dt><dd>${esc(r.name)}</dd>
     <dt>電話</dt><dd><a href="tel:${esc(r.tel)}">${esc(r.tel)}</a></dd>
     ${r.email ? `<dt>メール</dt><dd><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></dd>` : ""}
+    ${r.resp ? `<dt>使用責任者</dt><dd>${esc(r.resp.name)}<br><a href="tel:${esc(r.resp.tel)}">${esc(r.resp.tel)}</a>${r.resp.email ? `<br><a href="mailto:${esc(r.resp.email)}">${esc(r.resp.email)}</a>` : ""}<br>${esc(r.resp.address)}</dd>` : ""}
     <dt>利用目的</dt><dd>${esc(r.purpose)}${r.people ? `（${esc(r.people)}人）` : ""}</dd>
     ${r.note ? `<dt>連絡事項</dt><dd>${esc(r.note)}</dd>` : ""}</dl>
     ${feeTable(r.fee, r.feeAdj)}`;
@@ -1305,7 +1324,7 @@ function printReceipt(){
   window.print();
 }
 /* ===== CSV ===== */
-const REQ_HEAD = ["受付番号","受付日時","受付方法","利用日","利用区分","団体名","代表者","電話","メール","利用目的","人数","部屋・時間帯","使用料","状態","利用者登録","支払方法","入金日","入金額","領収書番号","チェック日時","確認者","破損・汚損","連絡事項","管理メモ"];
+const REQ_HEAD = ["受付番号","受付日時","受付方法","利用日","利用区分","団体名","代表者","電話","メール","使用責任者","責任者住所","責任者電話","責任者メール","利用目的","人数","部屋・時間帯","使用料","状態","利用者登録","支払方法","入金日","入金額","領収書番号","チェック日時","確認者","破損・汚損","連絡事項","管理メモ"];
 const USER_HEAD = ["種別","状態","団体名","代表者","電話","メール","利用区分","申請日","承認日","備考"];
 function downloadCSV(name, rows){
   const csv = "\ufeff" + rows.map(row => row.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
@@ -1381,7 +1400,7 @@ function headIndex(rows){
 
 /* 申込の書き出し */
 function reqRow(r){
-  return [r.no, fmtTs(r.createdAt), r.source, r.date, `${r.cat} ${CATS[r.cat]?.name || ""}`, r.group, r.name, r.tel, r.email, r.purpose, r.people,
+  return [r.no, fmtTs(r.createdAt), r.source, r.date, `${r.cat} ${CATS[r.cat]?.name || ""}`, r.group, r.name, r.tel, r.email, r.resp?.name, r.resp?.address, r.resp?.tel, r.resp?.email, r.purpose, r.people,
     summaryText(r.cat, r.cells || [], 1), effFee(r), ST[r.status].adm, r.uid ? (USER_ST[S.users[r.uid]?.status]?.name || "") : (r.source || "窓口"),
     r.payment?.method, r.payment?.paidAt, r.payment?.amount, r.payment?.receiptNo,
     r.check ? fmtTs(r.check.at) : "", r.check?.checker, r.check ? r.check.damage + (r.check.damageNote ? "：" + r.check.damageNote : "") : "", r.note, r.adminMemo];
@@ -1393,8 +1412,8 @@ function exportCSV(all){
 function templateReq(){
   const d = addDays(today(), 7);
   downloadCSV("小川会館_申込_ひな形.csv", [REQ_HEAD,
-    ["", "", "", d, "A 登録会員", "小川書道の会", "佐藤 花子", "042-000-0000", "", "書道教室", "10", "和室A 午後", "", "確定・未払", "", "", "", "", "", "", "", "", "", ""],
-    ["", "", "", d, "D", "小川自治会", "鈴木 次郎", "042-000-0001", "", "役員会", "8", "会議室 全日", "300", "支払済", "", "現金", d, "300", "", "", "", "", "", ""]]);
+    ["", "", "", d, "A 登録会員", "小川書道の会", "佐藤 花子", "042-000-0000", "", "山口 和子", "町田市小川1-1-1", "090-0000-0001", "", "書道教室", "10", "和室A 午後", "", "確定・未払", "", "", "", "", "", "", "", "", "", ""],
+    ["", "", "", d, "D", "小川自治会", "鈴木 次郎", "042-000-0001", "", "高橋 三郎", "町田市小川2-2-2", "090-0000-0002", "", "役員会", "8", "会議室 全日", "300", "支払済", "", "現金", d, "300", "", "", "", "", "", ""]]);
 }
 /* 利用者・名簿の書き出し */
 function exportUsers(){
@@ -1450,7 +1469,9 @@ function analyzeReqRows(rows){
     const hasPay = status === "paid" || status === "done" || paidAmt != null;
     if (hasPay && status === "approved") status = "paid";
     return {line, ok:true, show:[fmtDate(date), group || name, summaryText(cat, cells, 1)], data:{
-      no, date, cat, cells, group, name, tel:get(r, "電話"), email:get(r, "メール"), purpose:get(r, "利用目的") || "（CSV取込）", people:get(r, "人数"),
+      no, date, cat, cells, group, name, tel:get(r, "電話"), email:get(r, "メール"),
+      resp:get(r, "使用責任者") ? {name:get(r, "使用責任者"), address:get(r, "責任者住所"), tel:get(r, "責任者電話"), email:get(r, "責任者メール")} : null,
+      purpose:get(r, "利用目的") || "（CSV取込）", people:get(r, "人数"),
       note:get(r, "連絡事項", "備考"), adminMemo:get(r, "管理メモ"), status, fee,
       feeAdj:feeNum != null && feeNum !== fee.total ? {amount:feeNum, reason:"CSV取込時の金額"} : null,
       payment:hasPay ? {method:get(r, "支払方法") || "現金", amount:paidAmt ?? feeNum ?? fee.total, paidAt:paidAt || date, receiptNo:get(r, "領収書番号"), at:Date.now()} : null}};
