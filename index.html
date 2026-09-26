@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2E5A48">
+<title>小川会館 予約受付</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232E5A48'/%3E%3Crect x='14' y='14' width='36' height='40' rx='3' fill='%23fff'/%3E%3Ccircle cx='18' cy='16' r='5' fill='%23B08A3E'/%3E%3Cpath d='M22 28h20M22 36h20M22 44h12' stroke='%232E5A48' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+:root{
+  --board:#2E5A48; --board-deep:#1F4033; --board-soft:#E4EDE7;
+  --bg:#EDF1EC; --paper:#FFFFFF; --ink:#1C2621; --sub:#58675F; --line:#D2DAD1;
+  --brass:#B08A3E;
+  --hold:#C98612; --hold-soft:#FBF0D9;
+  --appr:#3A6EA5; --appr-soft:#E2EBF6;
+  --paid:#2E7D55; --paid-soft:#DCEFE3;
+  --danger:#B5473A; --danger-soft:#F6E1DD;
+  --done:#6F7B75; --done-soft:#ECEFED;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"BIZ UDPGothic","Hiragino Sans","Yu Gothic",sans-serif;font-size:16px;line-height:1.65;padding-bottom:calc(72px + env(safe-area-inset-bottom,0px));-webkit-text-size-adjust:100%}
+h1,h2,h3,.maru{font-family:"Zen Maru Gothic","BIZ UDPGothic",sans-serif;font-weight:700;letter-spacing:.02em}
+h2{font-size:1.1rem;margin:0 0 12px}
+h2 small{font-family:"BIZ UDPGothic",sans-serif;font-weight:400;font-size:.8rem;color:var(--sub);margin-left:6px}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--brass);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* ヘッダー：掲示板に貼り紙 */
+.top{background:var(--board);padding:calc(env(safe-area-inset-top,0px) + 16px) 16px 20px;position:relative}
+.top-in{max-width:880px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.slip{background:var(--paper);display:inline-block;padding:10px 20px 10px 24px;position:relative;box-shadow:0 3px 0 rgba(0,0,0,.18);transform:rotate(-1.2deg)}
+.slip::before{content:"";position:absolute;left:-7px;top:-7px;width:16px;height:16px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#EBD396,var(--brass) 60%,#6E5420);box-shadow:1px 2px 2px rgba(0,0,0,.3)}
+.slip h1{margin:0;font-size:clamp(1.05rem,5vw,1.3rem);white-space:nowrap;line-height:1.2;border-bottom:2px solid var(--ink);padding-bottom:2px}
+.slip small{display:block;font-size:.72rem;color:var(--sub);margin-top:3px}
+.badge{font-size:.75rem;background:var(--brass);color:#fff;padding:3px 10px;border-radius:99px;white-space:nowrap}
+.badge.admin{background:#fff;color:var(--board-deep)}
+
+main{max-width:880px;margin:0 auto;padding:16px 14px 24px}
+.card{background:var(--paper);border-radius:14px;padding:16px;margin-bottom:14px;border:1px solid var(--line)}
+.hint{font-size:.85rem;color:var(--sub);margin:10px 0 0}
+.note{background:var(--hold-soft);border-left:4px solid var(--hold);padding:10px 12px;border-radius:6px;margin-bottom:14px;font-size:.92rem}
+
+/* ボタン */
+.btn{appearance:none;border:0;background:var(--board);color:#fff;font-weight:700;min-height:48px;padding:10px 18px;border-radius:10px;cursor:pointer;font-family:"Zen Maru Gothic","BIZ UDPGothic",sans-serif;font-size:1rem}
+.btn:hover{background:var(--board-deep)}
+.btn:disabled{background:#AEB9B2;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--board);border:2px solid var(--board)}
+.btn.ghost:hover{background:var(--board-soft)}
+.btn.danger{background:var(--danger)}
+.btn.appr{background:var(--appr)}
+.btn.wide{width:100%;margin-top:14px}
+.btn.sm{min-height:38px;padding:6px 12px;font-size:.9rem}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.link{background:none;border:0;color:var(--board);text-decoration:underline;cursor:pointer;padding:4px 0;font-size:.92rem}
+
+/* 利用区分 */
+.chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.chip{display:flex;align-items:center;gap:8px;text-align:left;background:#fff;border:2px solid var(--line);border-radius:10px;padding:8px 10px;cursor:pointer;min-height:52px;font-size:.9rem;line-height:1.3}
+.chip b{flex:none;width:28px;height:28px;border-radius:6px;display:grid;place-items:center;background:var(--board-soft);color:var(--board-deep);font-family:"Zen Maru Gothic",sans-serif}
+.chip.on{border-color:var(--board);background:var(--board-soft)}
+.chip.on b{background:var(--board);color:#fff}
+
+/* 日付 */
+.datehead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.datehead h2{margin:0;font-size:1.25rem}
+.datehead input{border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-height:44px;background:#fff}
+.strip{display:flex;align-items:center;gap:6px}
+.strip .nav{flex:none;width:36px;height:64px;border:1px solid var(--line);background:#fff;border-radius:8px;font-size:1.4rem;cursor:pointer}
+.strip .nav:disabled{opacity:.35;cursor:default}
+.days{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;flex:1}
+.days::-webkit-scrollbar{display:none}
+.day{flex:none;width:52px;height:64px;border:1px solid var(--line);background:#fff;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;position:relative;padding:0 0 6px}
+.day span{font-size:.72rem;color:var(--sub)}
+.day b{font-size:1.15rem;line-height:1.1}
+.day i{position:absolute;left:8px;right:8px;bottom:6px;height:4px;border-radius:2px;background:var(--board-soft);overflow:hidden}
+.day i::after{content:"";position:absolute;inset:0;width:calc(var(--r) * 100%);background:var(--hold)}
+.day.wd0 span,.day.wd0 b{color:var(--danger)}
+.day.wd6 span,.day.wd6 b{color:var(--appr)}
+.day.on{background:var(--board);border-color:var(--board)}
+.day.on span,.day.on b{color:#fff}
+
+/* 空き状況ボード */
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:.8rem;color:var(--sub);margin-bottom:10px}
+.lg::before{content:"";display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:4px;border:1px solid var(--line);background:#fff}
+.lg.sel::before{background:var(--board);border-color:var(--board)}
+.lg.hold::before{background:var(--hold-soft);border-color:var(--hold)}
+.lg.fixed::before{background:repeating-linear-gradient(45deg,#DDE3DE 0 4px,#CBD3CD 4px 8px);border-color:#B9C3BC}
+.board{display:grid;grid-template-columns:minmax(78px,1fr) repeat(3,minmax(0,1.4fr));gap:6px}
+.bh{text-align:center;font-size:.9rem;line-height:1.25;padding:4px 0}
+.bh small{display:block;font-size:.72rem;color:var(--sub)}
+.rh{display:flex;align-items:center;font-weight:700;font-size:.95rem;padding-left:2px}
+.cell{min-height:54px;border-radius:8px;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-size:.92rem;padding:4px}
+.cell.free:hover{border-color:var(--board);background:var(--board-soft)}
+.cell.sel{background:var(--board);border-color:var(--board);color:#fff;font-weight:700;box-shadow:inset 0 0 0 2px rgba(255,255,255,.35)}
+.cell.hold{background:var(--hold-soft);border-color:var(--hold);color:#7A510A;cursor:not-allowed}
+.cell.fixed{background:repeating-linear-gradient(45deg,#E4E9E5 0 6px,#D6DDD8 6px 12px);color:var(--sub);cursor:not-allowed}
+.cell.blocked,.cell.na,.cell.past{background:#F3F5F3;color:#9AA59F;cursor:not-allowed;font-size:.8rem;border-style:dashed}
+
+.ceremony{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-bottom:10px}
+.cday{border-radius:10px;padding:12px 14px;border:2px solid}
+.cday b{display:block}
+.cday.ok{border-color:var(--paid);background:var(--paid-soft)}
+.cday.ng{border-color:var(--danger);background:var(--danger-soft)}
+.check{display:flex;align-items:flex-start;gap:10px;padding:8px 0;cursor:pointer}
+.check input{width:22px;height:22px;flex:none;margin-top:2px;accent-color:var(--board)}
+
+/* 選択バー */
+.selbar{position:sticky;bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:5;background:var(--board-deep);color:#fff;border-radius:14px;padding:10px 10px 10px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 6px 20px rgba(20,40,30,.25)}
+.selbar small{display:block;font-size:.8rem;opacity:.85;line-height:1.35}
+.selbar b{font-size:1.35rem;font-family:"Zen Maru Gothic",sans-serif}
+.selbar .btn{background:#fff;color:var(--board-deep)}
+.selbar .btn:disabled{background:rgba(255,255,255,.3);color:rgba(255,255,255,.7)}
+
+/* フォーム */
+.field{margin-bottom:12px}
+.field label{display:block;font-size:.9rem;font-weight:700;margin-bottom:4px}
+.field label em{font-style:normal;color:var(--danger);font-size:.78rem;margin-left:6px;font-weight:400}
+.field input,.field select,.field textarea,.row input{width:100%;border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;min-height:48px;background:#fff}
+.field textarea{min-height:80px;resize:vertical}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.row{display:flex;gap:8px}
+.row input{flex:1}
+dl.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0 0 12px;font-size:.95rem}
+dl.kv dt{color:var(--sub);white-space:nowrap}
+dl.kv dd{margin:0;word-break:break-all}
+table.fee{width:100%;border-collapse:collapse;font-size:.95rem}
+table.fee td,table.fee th{padding:7px 4px;border-bottom:1px dashed var(--line);text-align:left}
+table.fee td:last-child,table.fee th:last-child{text-align:right;white-space:nowrap}
+table.fee tr.total th{border-bottom:0;border-top:2px solid var(--ink);font-size:1.1rem}
+table.fee tr.adj td{color:var(--appr)}
+
+/* 受付完了 */
+.receipt-no{text-align:center;padding:20px 10px;border:2px dashed var(--board);border-radius:12px;margin:12px 0;background:var(--board-soft)}
+.receipt-no small{display:block;color:var(--sub)}
+.receipt-no b{font-size:2rem;letter-spacing:.08em;font-family:"Zen Maru Gothic",sans-serif}
+
+/* 状況ステップ */
+.steps{list-style:none;padding:0;margin:14px 0;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;counter-reset:s}
+.steps li{text-align:center;font-size:.78rem;color:var(--sub);position:relative;padding-top:34px;counter-increment:s}
+.steps li::before{content:counter(s);position:absolute;top:0;left:50%;transform:translateX(-50%);width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#fff;border:2px solid var(--line);font-weight:700}
+.steps li.on{color:var(--ink);font-weight:700}
+.steps li.on::before{background:var(--board);border-color:var(--board);color:#fff}
+
+/* ステータス */
+.pill{display:inline-block;font-size:.78rem;font-weight:700;padding:2px 10px;border-radius:99px;white-space:nowrap}
+.pill.hold{background:var(--hold-soft);color:#8A5A08}
+.pill.appr{background:var(--appr-soft);color:var(--appr)}
+.pill.paid{background:var(--paid-soft);color:var(--paid)}
+.pill.done{background:var(--done-soft);color:var(--done)}
+.pill.danger{background:var(--danger-soft);color:var(--danger)}
+.flag{display:inline-block;font-size:.74rem;color:var(--danger);border:1px solid var(--danger);border-radius:4px;padding:0 6px;margin-left:4px}
+
+/* 料金表 */
+.feegrid{width:100%;border-collapse:collapse;font-size:.92rem;margin-bottom:6px}
+.feegrid th,.feegrid td{border:1px solid var(--line);padding:6px 6px;text-align:right}
+.feegrid thead th{background:var(--board-soft);text-align:center;font-weight:700}
+.feegrid tbody th{text-align:left;font-weight:700;white-space:nowrap;background:#FAFBFA}
+.scroll{overflow-x:auto}
+.cat-title{display:flex;align-items:center;gap:8px;margin:18px 0 8px}
+.cat-title:first-child{margin-top:0}
+.cat-title b{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;background:var(--board);color:#fff;font-family:"Zen Maru Gothic",sans-serif;flex:none}
+
+/* 管理 */
+.subtabs{display:flex;gap:4px;background:var(--board-soft);padding:4px;border-radius:12px;margin-bottom:14px}
+.subtabs button{flex:1;white-space:nowrap;font-size:.92rem;border:0;background:transparent;min-height:42px;border-radius:9px;cursor:pointer;font-weight:700;color:var(--sub)}
+.subtabs button.on{background:#fff;color:var(--board-deep);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.filters{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px;scrollbar-width:none}
+.filters button{flex:none;border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:6px 12px;cursor:pointer;font-size:.88rem;min-height:38px}
+.filters button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.filters button i{font-style:normal;font-weight:700;margin-left:4px}
+.req{display:grid;grid-template-columns:64px 1fr auto;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;text-align:left;width:100%}
+.req:hover{border-color:var(--board)}
+.req .dt{text-align:center;border-right:1px solid var(--line);padding-right:10px;line-height:1.2}
+.req .dt b{display:block;font-size:1.4rem;font-family:"Zen Maru Gothic",sans-serif}
+.req .dt small{font-size:.75rem;color:var(--sub)}
+.req .who{font-weight:700}
+.req .what{font-size:.85rem;color:var(--sub);line-height:1.4}
+.req .right{text-align:right;line-height:1.5}
+.req .right b{display:block;font-size:.95rem}
+.empty{text-align:center;color:var(--sub);padding:28px 10px}
+.monthnav{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:12px}
+.monthnav b{font-size:1.15rem;min-width:120px;text-align:center;font-family:"Zen Maru Gothic",sans-serif}
+.monthnav button{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:#fff;font-size:1.2rem;cursor:pointer}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.cal .wh{text-align:center;font-size:.78rem;color:var(--sub);padding:2px 0}
+.cal .wh:first-child{color:var(--danger)}.cal .wh:last-child{color:var(--appr)}
+.cal .cd{min-height:70px;background:#fff;border:1px solid var(--line);border-radius:6px;padding:3px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:2px;overflow:hidden}
+.cal .cd.blank{background:transparent;border:0;cursor:default}
+.cal .cd.today{border:2px solid var(--board)}
+.cal .cd .n{font-size:.8rem;font-weight:700}
+.ev{display:block;font-size:.68rem;border-radius:3px;padding:0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.5}
+.ev.hold{background:var(--hold-soft);color:#7A510A}.ev.appr{background:var(--appr-soft);color:var(--appr)}.ev.paid{background:var(--paid-soft);color:var(--paid)}.ev.done{background:var(--done-soft);color:var(--done)}
+.more{font-size:.68rem;color:var(--sub)}
+@media (max-width:560px){.ev{font-size:0;height:6px;padding:0}.cal .cd{min-height:56px}}
+.daytable{width:100%;border-collapse:collapse;font-size:.85rem;margin-bottom:12px}
+.daytable th,.daytable td{border:1px solid var(--line);padding:5px;vertical-align:top}
+.daytable thead th{background:var(--board-soft)}
+.daytable tbody th{text-align:left;white-space:nowrap}
+.stat{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-size:1rem}
+.stat dt{color:var(--sub)}.stat dd{margin:0;text-align:right;font-weight:700}
+.stat dd.warn{color:var(--danger)}
+table.list{width:100%;border-collapse:collapse;font-size:.9rem}
+table.list th,table.list td{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
+table.list td.r,table.list th.r{text-align:right}
+pre.rules{background:#F4F6F4;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:.75rem;overflow-x:auto;white-space:pre}
+.infobox{background:#F7F9F7;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:12px}
+.infobox h3{margin:0 0 8px;font-size:1rem}
+
+/* シート */
+#sheet{position:fixed;inset:0;z-index:50;display:none}
+#sheet.open{display:block}
+.scrim{position:absolute;inset:0;background:rgba(20,32,26,.45)}
+.panel{position:absolute;left:0;right:0;bottom:0;max-height:92vh;overflow-y:auto;background:var(--paper);border-radius:18px 18px 0 0;padding:18px 16px calc(24px + env(safe-area-inset-bottom,0px));animation:up .22s ease-out}
+@media (min-width:720px){.panel{left:50%;right:auto;bottom:auto;top:50%;transform:translate(-50%,-50%);width:640px;border-radius:18px;animation:none}}
+@keyframes up{from{transform:translateY(30px);opacity:.4}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.panel{animation:none}}
+.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
+.sheet-head h2{margin:6px 0 2px;font-size:1.25rem}
+.sheet-head small{color:var(--sub);font-size:.8rem}
+.x{border:0;background:var(--bg);width:40px;height:40px;border-radius:50%;font-size:1.3rem;cursor:pointer;flex:none}
+.sec{border-top:1px solid var(--line);padding-top:12px;margin-top:14px}
+.sec h3{font-size:1rem;margin:0 0 8px}
+
+/* 下部ナビ */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:#fff;border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs button{flex:1;border:0;background:none;min-height:62px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:.78rem;color:var(--sub)}
+.tabs button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tabs button.on{color:var(--board);font-weight:700}
+
+#toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:10px;font-size:.92rem;z-index:80;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
+#toast.show{opacity:1}
+
+/* 領収書印刷 */
+#print{display:none}
+@media print{
+  body{background:#fff;padding:0}
+  body>*:not(#print){display:none!important}
+  #print{display:block}
+  .rc{width:170mm;margin:10mm auto;border:1.5px solid #000;padding:12mm 14mm;font-family:"BIZ UDPGothic",serif;color:#000}
+  .rc h1{text-align:center;letter-spacing:.6em;font-size:22pt;margin:0 0 6mm}
+  .rc .meta{text-align:right;font-size:10pt}
+  .rc .to{font-size:15pt;border-bottom:1px solid #000;display:inline-block;min-width:90mm;margin:6mm 0}
+  .rc .amt{font-size:24pt;text-align:center;border-top:2px solid #000;border-bottom:2px solid #000;padding:3mm 0;margin:4mm 0;font-weight:700}
+  .rc table{width:100%;border-collapse:collapse;font-size:10pt;margin:4mm 0}
+  .rc td{border-bottom:1px dotted #000;padding:1.5mm 0}
+  .rc td:last-child{text-align:right}
+  .rc .issuer{text-align:right;margin-top:10mm;font-size:12pt;position:relative;padding-right:22mm}
+  .rc .stamp{position:absolute;right:0;top:-3mm;width:18mm;height:18mm;border:1px solid #000;border-radius:50%;display:grid;place-items:center;font-size:10pt}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div class="slip"><h1>小川会館 予約受付</h1><small>申込・空き状況・料金</small></div>
+    <div><span class="badge" id="demoBadge" hidden>お試しモード</span> <span class="badge admin" id="adminBadge" hidden>管理者</span></div>
+  </div>
+</header>
+<main id="app"></main>
+<nav class="tabs" aria-label="画面の切り替え">
+  <button data-v="board" onclick="go('board')"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>空き・申込</button>
+  <button data-v="lookup" onclick="go('lookup')"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>申込の確認</button>
+  <button data-v="fees" onclick="go('fees')"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 10h16M10 10v10"/></svg>料金表</button>
+  <button data-v="admin" onclick="go('admin')"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>管理</button>
+</nav>
+<div id="sheet"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="print"></div>
+
+<script>
+/* =========================================================
+   設定（ここを書き換えてください）
+   FIREBASE_CONFIG の apiKey が空のままだと「お試しモード」で動きます
+   （データはこの端末のブラウザにだけ保存されます）
+   ========================================================= */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCVbfpe_4HdY5J1_ccdAi6AFF-lS4pmZ6M",
+  authDomain: "ogawa-machida.firebaseapp.com",
+  databaseURL: "https://ogawa-machida-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "ogawa-machida",
+  storageBucket: "ogawa-machida.firebasestorage.app",
+  messagingSenderId: "864551639060",
+  appId: "1:864551639060:web:02bf724ca74e62a973ef01"
+};
+const HALL = {
+  name: "小川会館",
+  issuer: "小川会館 管理人",               // 領収書の発行者名
+  contact: "小川会館 管理人までご連絡ください", // 取消・問い合わせ先の案内文
+  demoPin: "0000"                          // お試しモードの管理者PIN
+};
+const ROOT = "ogawaHall"; // Realtime Database 上の保存先
+
+/* ===== 料金表（平成17年5月22日改訂） ===== */
+const ROOMS = [
+  {id:"HA",name:"ホールA",short:"ホA"},{id:"HB",name:"ホールB",short:"ホB"},
+  {id:"WA",name:"和室A",short:"和A"},{id:"WB",name:"和室B",short:"和B"},
+  {id:"KG",name:"会議室",short:"会議"},{id:"ALL",name:"全室",short:"全室"}
+];
+const ROOM_IDS = ["HA","HB","WA","WB","KG"];
+const SLOTS = [
+  {id:"am",name:"午前",time:"9:00〜12:00"},
+  {id:"pm",name:"午後",time:"13:00〜17:00"},
+  {id:"ev",name:"夜間",time:"18:00〜22:00"}
+];
+const CATS = {
+  A:{name:"登録会員"},
+  B:{name:"一般"},
+  C:{name:"老人会・婦人会・子供会"},
+  D:{name:"福祉活動会員・加盟自治会"},
+  K:{name:"冠婚葬祭（全館貸切）"}
+};
+// [1枠（午前・午後・夜間それぞれ）, 全日]
+const FEES = {
+  A:{HA:[700,1800],HB:[700,1800],WA:[500,1300],WB:[400,1000],KG:[300,800],ALL:[2200,5500]},
+  B:{HA:[1400,3600],HB:[1400,3600],WA:[1000,2600],WB:[800,2000],KG:[600,1600],ALL:[4400,11000]},
+  C:{HA:[450,1200],HB:[450,1200],WA:[300,800],WB:[250,650],KG:[200,550]},
+  D:{HA:[200,600],HB:[200,600],WA:[100,300],WB:[100,300],KG:[100,300]}
+};
+const CEREMONY = {room:15000, ac:1500};
+const CHECK_ITEMS = [
+  ["clean","床・机の清掃"],["trash","ゴミの持ち帰り"],["layout","机・椅子・備品を元の位置へ"],
+  ["ac","冷暖房・換気扇の停止"],["light","消灯"],["water","ガス・水道の確認"],
+  ["lock","窓・戸の施錠"],["shoe","下足入れの整理"],["key","鍵の返却"]
+];
+const ST = {
+  applied:{pub:"申込を受け付けました（確認中）",adm:"新規申込",cls:"hold"},
+  approved:{pub:"承認済み・お支払い待ち",adm:"承認済・未払",cls:"appr"},
+  paid:{pub:"お支払い済み",adm:"支払済",cls:"paid"},
+  done:{pub:"ご利用完了",adm:"完了",cls:"done"},
+  rejected:{pub:"お受けできませんでした",adm:"却下",cls:"danger"},
+  cancelled:{pub:"取り消しになりました",adm:"取消",cls:"danger"}
+};
+
+/* ===== 小道具 ===== */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const yen = n => "¥" + Number(n || 0).toLocaleString("ja-JP");
+const pad = n => String(n).padStart(2, "0");
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const today = () => ymd(new Date());
+const parse = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate()+n); return ymd(d); };
+const WD = "日月火水木金土";
+const fmtDate = s => { if(!s) return ""; const d = parse(s); return `${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）`; };
+const fmtFull = s => s ? `${parse(s).getFullYear()}年${fmtDate(s)}` : "";
+const fmtTs = t => { if(!t) return ""; const d = new Date(t); return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const clean = o => JSON.parse(JSON.stringify(o));
+const slotName = id => SLOTS.find(s => s.id === id).name;
+const slotOrder = (a, b) => SLOTS.findIndex(s => s.id === a) - SLOTS.findIndex(s => s.id === b);
+function toast(msg){ const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 3200); }
+
+/* ===== 状態 ===== */
+const S = {
+  view:"board", date:today(), stripStart:today(), cat:"A", sel:new Set(), days:1, stay:false,
+  form:{}, slots:{}, requests:{}, isAdmin:false, adminTab:"list", filter:"applied",
+  month:today().slice(0,7), user:null, adminEntry:false, openId:null, sheetMode:null
+};
+
+/* ===== 保存先（Firebase / お試しモード） ===== */
+const DEMO = !FIREBASE_CONFIG.apiKey || typeof firebase === "undefined";
+let db = null, auth = null, unsubReq = null;
+const demoListeners = [];
+const DEMO_KEY = "ogawaHallDemo";
+let demoTree = {};
+if (DEMO) { try { demoTree = JSON.parse(localStorage.getItem(DEMO_KEY) || "{}"); } catch(e) { demoTree = {}; } }
+function dget(p){ return p.split("/").reduce((o,k) => o == null ? null : (o[k] ?? null), demoTree); }
+function dset(p, v){
+  const ks = p.split("/"); let o = demoTree;
+  for (let i = 0; i < ks.length-1; i++) { if (typeof o[ks[i]] !== "object" || o[ks[i]] === null) o[ks[i]] = {}; o = o[ks[i]]; }
+  const last = ks[ks.length-1];
+  if (v === null || v === undefined) delete o[last]; else o[last] = clean(v);
+}
+const store = {
+  async get(p){
+    if (DEMO) return clean(dget(p));
+    return (await db.ref(`${ROOT}/${p}`).once("value")).val();
+  },
+  async update(obj){
+    if (DEMO) {
+      for (const k in obj) dset(k, obj[k]);
+      try { localStorage.setItem(DEMO_KEY, JSON.stringify(demoTree)); } catch(e) {}
+      demoListeners.forEach(l => l.cb(clean(dget(l.p))));
+      return;
+    }
+    const o = {}; for (const k in obj) o[`${ROOT}/${k}`] = obj[k] === undefined ? null : obj[k];
+    await db.ref().update(o);
+  },
+  on(p, cb){
+    if (DEMO) { const l = {p, cb}; demoListeners.push(l); cb(clean(dget(p))); return () => { const i = demoListeners.indexOf(l); if (i >= 0) demoListeners.splice(i, 1); }; }
+    const r = db.ref(`${ROOT}/${p}`); const h = s => cb(s.val());
+    r.on("value", h, e => console.warn(p, e.message));
+    return () => r.off("value", h);
+  }
+};
+async function ensureAuth(){
+  if (DEMO) return;
+  if (!auth.currentUser) await auth.signInAnonymously();
+}
+
+/* ===== 料金・空き判定 ===== */
+function cellState(date, room, slot){
+  if (date < today()) return "past";
+  const o = S.slots[date] || {}, k = `${room}_${slot}`;
+  if (o[k]) return o[k].status === "fixed" ? "fixed" : "hold";
+  if (room === "ALL") { if (ROOM_IDS.some(r => o[`${r}_${slot}`])) return "blocked"; }
+  else if (o[`ALL_${slot}`]) return "blocked";
+  return "free";
+}
+function occRatio(date){
+  const o = S.slots[date] || {}; let n = 0;
+  SLOTS.forEach(s => { if (o[`ALL_${s.id}`]) { n += 5; return; } ROOM_IDS.forEach(r => { if (o[`${r}_${s.id}`]) n++; }); });
+  return (n / 15).toFixed(2);
+}
+function groupCells(cells){
+  const by = {}; cells.forEach(c => { const [r, s] = c.split("_"); (by[r] = by[r] || []).push(s); });
+  Object.values(by).forEach(a => a.sort(slotOrder)); return by;
+}
+function calcFee(cat, cells, days){
+  if (cat === "K") {
+    const a = (CEREMONY.room + CEREMONY.ac) * days;
+    return {total:a, lines:[{label:`全館貸切 ${days}日分（室料${yen(CEREMONY.room)}＋空調料${yen(CEREMONY.ac)}）`, amount:a}]};
+  }
+  const by = groupCells(cells), lines = []; let total = 0;
+  ROOMS.forEach(R => {
+    const ss = by[R.id], f = FEES[cat][R.id]; if (!ss || !f) return;
+    const full = ss.length === 3, amount = full ? f[1] : f[0] * ss.length;
+    lines.push({label:`${R.name} ${full ? "全日" : ss.map(slotName).join("・")}`, amount}); total += amount;
+  });
+  return {total, lines};
+}
+function summaryText(cat, cells, days){
+  if (cat === "K") return `全館貸切${days === 2 ? "（2日間）" : ""}`;
+  const by = groupCells(cells);
+  return ROOMS.filter(R => by[R.id]).map(R => `${R.name} ${by[R.id].length === 3 ? "全日" : by[R.id].map(slotName).join("・")}`).join("／");
+}
+function shortText(r){
+  if (r.cat === "K") return "全館貸切";
+  const by = groupCells(r.cells || []);
+  return ROOMS.filter(R => by[R.id]).map(R => R.short + (by[R.id].length === 3 ? "全日" : by[R.id].map(slotName).join(""))).join(" ");
+}
+function ceremonyOK(date){ return SLOTS.every(s => cellState(date, "ALL", s.id) === "free"); }
+function currentSelection(){
+  if (S.cat === "K") {
+    const ok = ceremonyOK(S.date) && (S.days === 1 || ceremonyOK(addDays(S.date, 1)));
+    return {cells: ok ? SLOTS.map(s => `ALL_${s.id}`) : [], ok};
+  }
+  return {cells:[...S.sel], ok:S.sel.size > 0};
+}
+const effFee = r => r.feeAdj ? r.feeAdj.amount : (r.fee ? r.fee.total : 0);
+const reqDates = r => [r.date, r.date2].filter(Boolean);
+const lastDate = r => r.date2 || r.date;
+function slotPaths(r){ const out = []; reqDates(r).forEach(d => (r.cells || []).forEach(c => out.push(`slots/${d}/${c}`))); return out; }
+
+/* ===== 画面の切り替え ===== */
+function navOf(v){ return ["form","done"].includes(v) ? "board" : v; }
+function go(v){ S.view = v; render(); window.scrollTo(0, 0); }
+function render(){
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === navOf(S.view)));
+  $("#demoBadge").hidden = !DEMO;
+  $("#adminBadge").hidden = !S.isAdmin;
+  const v = S.view;
+  $("#app").innerHTML =
+    v === "board" ? viewBoard() :
+    v === "form" ? viewForm() :
+    v === "done" ? viewDone() :
+    v === "lookup" ? viewLookup() :
+    v === "fees" ? viewFees() : viewAdmin();
+  if (v === "board") { const on = document.querySelector(".day.on"); if (on) on.scrollIntoView({block:"nearest", inline:"center"}); }
+}
+
+/* ===== 空き状況・申込 ===== */
+function viewBoard(){
+  let h = "";
+  if (S.adminEntry) h += `<div class="note">窓口受付モード：電話や窓口で受けた申込を代わりに登録します。 <button class="link" onclick="endAdminEntry()">終了する</button></div>`;
+  h += `<section class="card"><h2>利用区分</h2><div class="chips">${Object.entries(CATS).map(([k, c]) =>
+    `<button class="chip ${S.cat === k ? "on" : ""}" onclick="setCat('${k}')" aria-pressed="${S.cat === k}"><b>${k === "K" ? "冠" : k}</b>${c.name}</button>`).join("")}</div>
+    ${S.cat === "K" ? `<p class="hint">会員の利用に限ります。全館貸切、1日につき${yen(CEREMONY.room + CEREMONY.ac)}（室料15,000円＋空調料1,500円）。葬儀は通夜・告別式の2日間、通夜の宿泊ができます。その他の光熱費は使用料に含まれます。</p>` : ""}
+    ${S.cat === "C" || S.cat === "D" ? `<p class="hint">この区分では全室の料金設定がないため、部屋ごとにお選びください。</p>` : ""}</section>`;
+  h += dateStrip();
+  h += S.cat === "K" ? ceremonyPanel() : boardTable();
+  h += selectionBar();
+  return h;
+}
+function dateStrip(){
+  const start = S.stripStart, days = [...Array(14)].map((_, i) => addDays(start, i));
+  return `<section class="card"><div class="datehead"><h2>${fmtFull(S.date)}</h2>
+    <input type="date" value="${S.date}" min="${today()}" onchange="pickDate(this.value)" aria-label="日付を選ぶ"></div>
+    <div class="strip"><button class="nav" onclick="shiftStrip(-7)" ${start <= today() ? "disabled" : ""} aria-label="前の週">‹</button>
+    <div class="days">${days.map(x => { const d = parse(x); return `<button class="day ${x === S.date ? "on" : ""} wd${d.getDay()}" onclick="pickDate('${x}')" aria-label="${fmtDate(x)}"><span>${WD[d.getDay()]}</span><b>${d.getDate()}</b><i style="--r:${occRatio(x)}"></i></button>`; }).join("")}</div>
+    <button class="nav" onclick="shiftStrip(7)" aria-label="次の週">›</button></div>
+    <p class="hint">日付の下の帯は、その日の埋まり具合です。</p></section>`;
+}
+function boardTable(){
+  const d = S.date;
+  let h = `<section class="card"><h2>空き状況<small>空いている枠を押して選びます</small></h2>
+    <div class="legend"><span class="lg">空き（料金）</span><span class="lg sel">選択中</span><span class="lg hold">仮予約</span><span class="lg fixed">予約済</span></div>
+    <div class="board"><div class="bh"></div>${SLOTS.map(s => `<div class="bh"><b>${s.name}</b><small>${s.time}</small></div>`).join("")}`;
+  ROOMS.forEach(R => {
+    h += `<div class="rh">${R.name}</div>`;
+    SLOTS.forEach(s => {
+      const st = cellState(d, R.id, s.id), key = `${R.id}_${s.id}`, sel = S.sel.has(key), f = FEES[S.cat][R.id];
+      let cls = st, label = "", dis = true;
+      if (!f) { cls = "na"; label = "対象外"; }
+      else if (sel) { cls = "sel"; label = "選択中"; dis = false; }
+      else if (st === "free") { label = yen(f[0]); dis = false; }
+      else if (st === "hold") label = "仮予約";
+      else if (st === "fixed") label = "予約済";
+      else if (st === "blocked") label = R.id === "ALL" ? "一部使用中" : "全室利用";
+      else label = "—";
+      h += `<button class="cell ${cls}" ${dis ? "disabled" : ""} onclick="toggleCell('${R.id}','${s.id}')" aria-pressed="${sel}" aria-label="${R.name} ${s.name} ${label}">${label}</button>`;
+    });
+  });
+  h += `</div><p class="hint">同じ部屋の午前・午後・夜間をすべて選ぶと全日料金になります。</p></section>`;
+  return h;
+}
+function ceremonyPanel(){
+  const d2 = addDays(S.date, 1), ok1 = ceremonyOK(S.date), ok2 = ceremonyOK(d2);
+  const box = (d, ok) => `<div class="cday ${ok ? "ok" : "ng"}"><b>${fmtDate(d)}</b><span>${ok ? "全館貸切できます" : "使用中の部屋があるため貸切できません"}</span></div>`;
+  return `<section class="card"><h2>全館貸切の空き</h2>
+    <div class="ceremony">${box(S.date, ok1)}${S.days === 2 ? box(d2, ok2) : ""}</div>
+    <label class="check"><input type="checkbox" ${S.days === 2 ? "checked" : ""} onchange="S.days=this.checked?2:1;render()"><span>葬儀として通夜・告別式の2日間で申し込む</span></label>
+    ${S.days === 2 ? `<label class="check"><input type="checkbox" ${S.stay ? "checked" : ""} onchange="S.stay=this.checked"><span>通夜の宿泊をする</span></label>` : ""}
+    </section>`;
+}
+function selectionBar(){
+  const {cells, ok} = currentSelection(), fee = calcFee(S.cat, cells, S.days);
+  return `<div class="selbar"><div><small>${ok ? esc(summaryText(S.cat, cells, S.days)) : (S.cat === "K" ? "この日は貸切できません" : "枠を選んでください")}</small><b>${ok ? yen(fee.total) : "—"}</b></div>
+    <button class="btn" ${ok ? "" : "disabled"} onclick="go('form')">申込へ進む</button></div>`;
+}
+function setCat(k){
+  const prevK = S.cat === "K"; S.cat = k;
+  if (k === "K" || prevK) S.sel = new Set();
+  if (k === "C" || k === "D") SLOTS.forEach(s => S.sel.delete(`ALL_${s.id}`));
+  if (k !== "K") { S.days = 1; S.stay = false; }
+  render();
+}
+function pickDate(v){
+  if (!v) return; if (v < today()) v = today();
+  if (v !== S.date) S.sel = new Set();
+  S.date = v;
+  const end = addDays(S.stripStart, 13);
+  if (v < S.stripStart || v > end) S.stripStart = v;
+  render();
+}
+function shiftStrip(n){ let s = addDays(S.stripStart, n); if (s < today()) s = today(); S.stripStart = s; render(); }
+function toggleCell(r, s){
+  const k = `${r}_${s}`;
+  if (S.sel.has(k)) S.sel.delete(k);
+  else {
+    if (cellState(S.date, r, s) !== "free") return;
+    S.sel.add(k);
+    if (r === "ALL") ROOM_IDS.forEach(x => S.sel.delete(`${x}_${s}`)); else S.sel.delete(`ALL_${s}`);
+  }
+  render();
+}
+function feeTable(fee, adj){
+  return `<table class="fee">${fee.lines.map(l => `<tr><td>${esc(l.label)}</td><td>${yen(l.amount)}</td></tr>`).join("")}
+    ${adj ? `<tr class="adj"><td>調整後（${esc(adj.reason || "")}）</td><td>${yen(adj.amount)}</td></tr>` : ""}
+    <tr class="total"><th>使用料</th><th>${yen(adj ? adj.amount : fee.total)}</th></tr></table>`;
+}
+function viewForm(){
+  const {cells, ok} = currentSelection();
+  if (!ok) { S.view = "board"; return viewBoard(); }
+  const fee = calcFee(S.cat, cells, S.days), f = S.form, v = k => esc(f[k] || "");
+  const needGroup = S.cat === "C" || S.cat === "D";
+  return `<section class="card"><button class="link" onclick="go('board')">‹ 枠を選び直す</button>
+    <h2 style="margin-top:6px">申込内容</h2>
+    <dl class="kv"><dt>利用日</dt><dd>${fmtFull(S.date)}${S.cat === "K" && S.days === 2 ? `〜${fmtDate(addDays(S.date, 1))}` : ""}</dd>
+    <dt>利用区分</dt><dd>${CATS[S.cat].name}</dd>
+    <dt>部屋・時間</dt><dd>${esc(summaryText(S.cat, cells, S.days))}${S.cat === "K" && S.days === 2 && S.stay ? "（通夜宿泊あり）" : ""}</dd></dl>
+    ${feeTable(fee)}</section>
+    <section class="card"><h2>申込者</h2>
+    <div class="field"><label for="f_group">団体名${needGroup ? "<em>必須</em>" : "<em style='color:var(--sub)'>個人の場合は空欄</em>"}</label><input id="f_group" value="${v("group")}" autocomplete="organization"></div>
+    <div class="grid2">
+      <div class="field"><label for="f_name">代表者の氏名<em>必須</em></label><input id="f_name" value="${v("name")}" autocomplete="name"></div>
+      <div class="field"><label for="f_tel">電話番号<em>必須</em></label><input id="f_tel" type="tel" value="${v("tel")}" autocomplete="tel" inputmode="tel"></div>
+    </div>
+    <div class="field"><label for="f_email">メールアドレス</label><input id="f_email" type="email" value="${v("email")}" autocomplete="email"></div>
+    <div class="grid2">
+      <div class="field"><label for="f_purpose">利用目的<em>必須</em></label><input id="f_purpose" value="${v("purpose")}" placeholder="例 体操教室、定例会"></div>
+      <div class="field"><label for="f_people">人数（予定）</label><input id="f_people" type="number" min="1" inputmode="numeric" value="${v("people")}"></div>
+    </div>
+    <div class="field"><label for="f_note">連絡事項</label><textarea id="f_note" placeholder="準備で早めに入りたい、備品を使いたい など">${v("note")}</textarea></div>
+    <label class="check"><input type="checkbox" id="f_agree"><span>使用後は清掃・片付けをし、管理人の確認を受けます。使用料は承認後にお支払いします。</span></label>
+    <button class="btn wide" onclick="submitRequest(this)">この内容で申し込む</button></section>`;
+}
+function buildUpdate(id, req){
+  const up = {};
+  up[`requests/${id}`] = req;
+  up[`status/${req.no}`] = clean({status:req.status, date:req.date, date2:req.date2 || null, summary:summaryText(req.cat, req.cells, req.days || 1), fee:effFee(req), createdAt:req.createdAt});
+  reqDates(req).forEach(d => req.cells.forEach(c => up[`slots/${d}/${c}`] = {no:req.no, id, status:req.status === "applied" ? "hold" : "fixed"}));
+  return up;
+}
+const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+async function genNo(){
+  const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", base = today().replace(/-/g, "").slice(2);
+  for (let i = 0; i < 8; i++) {
+    const no = `${base}-${[...Array(4)].map(() => A[Math.floor(Math.random()*A.length)]).join("")}`;
+    if (!(await store.get(`status/${no}`))) return no;
+  }
+  throw new Error("no");
+}
+async function submitRequest(btn){
+  const g = id => document.getElementById(id).value.trim();
+  const f = {group:g("f_group"), name:g("f_name"), tel:g("f_tel"), email:g("f_email"), purpose:g("f_purpose"), people:g("f_people"), note:g("f_note")};
+  S.form = f;
+  const miss = [];
+  if ((S.cat === "C" || S.cat === "D") && !f.group) miss.push("団体名");
+  if (!f.name) miss.push("代表者の氏名"); if (!f.tel) miss.push("電話番号"); if (!f.purpose) miss.push("利用目的");
+  if (miss.length) return toast(`${miss.join("・")}を入力してください`);
+  if (!$("#f_agree").checked) return toast("使用後の片付けについての確認にチェックを入れてください");
+  const {cells, ok} = currentSelection(); if (!ok) return go("board");
+  btn.disabled = true; btn.textContent = "送信しています…";
+  try {
+    await ensureAuth();
+    const dates = [S.date]; if (S.cat === "K" && S.days === 2) dates.push(addDays(S.date, 1));
+    for (const d of dates) {
+      S.slots[d] = (await store.get(`slots/${d}`)) || {};
+      for (const c of cells) { const [r, s] = c.split("_"); if (cellState(d, r, s) !== "free") throw new Error("taken"); }
+    }
+    const id = genId(), no = await genNo(), fee = calcFee(S.cat, cells, S.days);
+    const req = clean({no, createdAt:Date.now(), source:S.adminEntry ? "窓口" : "Web", cat:S.cat, date:S.date, date2:dates[1] || null,
+      cells, days:S.cat === "K" ? S.days : 1, stay:S.cat === "K" && S.days === 2 && !!S.stay, fee, ...f, status:"applied"});
+    await store.update(buildUpdate(id, req));
+    S.lastReq = req; S.sel = new Set(); S.form = {}; S.days = 1; S.stay = false;
+    go("done");
+  } catch(e) {
+    console.warn(e);
+    btn.disabled = false; btn.textContent = "この内容で申し込む";
+    if (e.message === "taken" || e.code === "PERMISSION_DENIED" || /permission/i.test(e.message)) {
+      toast("選んだ枠がちょうど埋まりました。空き状況を見て選び直してください"); S.sel = new Set(); go("board");
+    } else toast("送信できませんでした。通信状態を確認してもう一度お試しください");
+  }
+}
+function viewDone(){
+  const r = S.lastReq; if (!r) { S.view = "board"; return viewBoard(); }
+  return `<section class="card"><h2>申込を受け付けました</h2>
+    <p>管理人が内容を確認し、承認します。承認後に使用料をお支払いください。</p>
+    <div class="receipt-no"><small>受付番号</small><b>${r.no}</b><small>申込状況の確認に使います。控えておいてください。</small></div>
+    <dl class="kv"><dt>利用日</dt><dd>${fmtFull(r.date)}${r.date2 ? `〜${fmtDate(r.date2)}` : ""}</dd><dt>部屋・時間</dt><dd>${esc(summaryText(r.cat, r.cells, r.days))}</dd><dt>使用料</dt><dd>${yen(r.fee.total)}</dd></dl>
+    <div class="btns"><button class="btn" onclick="S.lookupNo='${r.no}';S.lookupRes='';go('lookup')">申込状況を見る</button>
+    <button class="btn ghost" onclick="go('board')">続けて申し込む</button>
+    ${S.adminEntry ? `<button class="btn ghost" onclick="endAdminEntry()">管理画面に戻る</button>` : ""}</div></section>`;
+}
+
+/* ===== 申込の確認 ===== */
+function viewLookup(){
+  return `<section class="card"><h2>申込状況の確認</h2><p style="margin-top:0">申込のときに表示された受付番号を入力してください。</p>
+    <div class="row"><input id="lk" value="${esc(S.lookupNo || "")}" placeholder="例 260926-K4TQ" autocapitalize="characters" aria-label="受付番号"
+      onkeydown="if(event.key==='Enter')doLookup()"><button class="btn" onclick="doLookup()">確認する</button></div>
+    <div id="lkres">${S.lookupRes || ""}</div></section>`;
+}
+async function doLookup(){
+  const no = $("#lk").value.trim().toUpperCase().replace(/\s/g, ""); S.lookupNo = no;
+  if (!no) return toast("受付番号を入力してください");
+  let r = null; try { r = await store.get(`status/${no}`); } catch(e) {}
+  if (!r) { S.lookupRes = `<p class="note" style="margin-top:12px">「${esc(no)}」の申込は見つかりません。番号を確かめてもう一度入力してください。</p>`; return render(); }
+  const order = ["applied","approved","paid","done"], idx = order.indexOf(r.status);
+  S.lookupRes = `<div class="infobox"><p style="margin:0 0 6px"><span class="pill ${ST[r.status].cls}">${ST[r.status].pub}</span></p>
+    ${idx >= 0 ? `<ol class="steps">${["申込","承認","お支払い","利用完了"].map((n, i) => `<li class="${i <= idx ? "on" : ""}">${n}</li>`).join("")}</ol>` : ""}
+    <dl class="kv"><dt>利用日</dt><dd>${fmtFull(r.date)}${r.date2 ? `〜${fmtDate(r.date2)}` : ""}</dd><dt>部屋・時間</dt><dd>${esc(r.summary)}</dd><dt>使用料</dt><dd>${yen(r.fee)}</dd></dl>
+    <p class="hint">${r.status === "approved" ? "使用料を管理人へお支払いください。" : ""}取消・変更は${esc(HALL.contact)}。</p></div>`;
+  render();
+}
+
+/* ===== 料金表 ===== */
+function viewFees(){
+  const tbl = k => `<div class="scroll"><table class="feegrid"><thead><tr><th></th>${SLOTS.map(s => `<th>${s.name}</th>`).join("")}<th>全日</th></tr></thead>
+    <tbody>${ROOMS.filter(R => FEES[k][R.id]).map(R => { const f = FEES[k][R.id]; return `<tr><th>${R.name}</th>${SLOTS.map(() => `<td>${f[0].toLocaleString()}</td>`).join("")}<td>${f[1].toLocaleString()}</td></tr>`; }).join("")}</tbody></table></div>`;
+  return `<section class="card"><h2>使用料金<small>単位：円／平成17年5月22日改訂</small></h2>
+    ${["A","B","C","D"].map(k => `<div class="cat-title"><b>${k}</b><span class="maru">${CATS[k].name}</span></div>${tbl(k)}`).join("")}
+    <div class="cat-title"><b>冠</b><span class="maru">冠婚葬祭（会員利用に限定）</span></div>
+    <p style="margin:0">全館貸切、1日につき16,500円（室料15,000円＋空調料1,500円）。葬儀は通夜・告別式の2日間、通夜の宿泊ができます。その他の光熱費は使用料に含まれます。</p></section>
+    <section class="card"><h2>利用時間</h2><dl class="kv">${SLOTS.map(s => `<dt>${s.name}</dt><dd>${s.time}</dd>`).join("")}</dl>
+    <p class="hint" style="margin:0">同じ部屋を午前・午後・夜間すべて使う場合は全日料金です。</p></section>`;
+}
+
+/* ===== 管理 ===== */
+function setAdmin(flag){
+  S.isAdmin = flag;
+  if (flag && !unsubReq) unsubReq = store.on("requests", v => { S.requests = v || {}; if (S.view === "admin") render(); if (S.openId && $("#sheet").classList.contains("open") && !S.sheetMode) openDetail(S.openId); });
+  if (!flag && unsubReq) { unsubReq(); unsubReq = null; S.requests = {}; }
+  render();
+}
+function viewLogin(){
+  if (DEMO) return `<section class="card"><h2>管理者ログイン</h2><p style="margin-top:0">お試しモードです。PIN「${esc(HALL.demoPin)}」でログインできます。</p>
+    <div class="row"><input id="pin" type="password" inputmode="numeric" placeholder="PIN" aria-label="PIN" onkeydown="if(event.key==='Enter')demoLogin()"><button class="btn" onclick="demoLogin()">ログイン</button></div></section>`;
+  const u = S.user;
+  if (u && !u.isAnonymous) return `<section class="card"><h2>管理者として登録されていません</h2>
+    <p style="margin-top:0">${esc(u.email || "")} でログインしています。Firebase コンソールの Realtime Database で、次の場所に <b>true</b> を登録すると管理者になります。</p>
+    <pre class="rules">${ROOT}/admins/${esc(u.uid)} : true</pre>
+    <div class="btns"><button class="btn ghost" onclick="copyText('${esc(u.uid)}')">ユーザーIDをコピー</button><button class="btn" onclick="recheckAdmin()">登録したので再確認</button><button class="btn ghost" onclick="logout()">ログアウト</button></div></section>`;
+  return `<section class="card"><h2>管理者ログイン</h2><p style="margin-top:0">管理人・担当者は Google アカウントでログインしてください。</p>
+    <button class="btn" onclick="googleLogin()">Google でログイン</button></section>`;
+}
+function demoLogin(){ if ($("#pin").value === HALL.demoPin) setAdmin(true); else toast("PINが違います"); }
+async function googleLogin(){
+  try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+  catch(e) { if (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment") await auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider()); else toast("ログインできませんでした：" + e.code); }
+}
+async function recheckAdmin(){ const u = auth.currentUser; if (!u) return; const ok = await store.get(`admins/${u.uid}`).catch(() => null); setAdmin(!!ok); if (!ok) toast("まだ登録されていません"); }
+async function logout(){ closeSheet(); if (DEMO) return setAdmin(false); await auth.signOut(); setAdmin(false); }
+function copyText(t){ navigator.clipboard?.writeText(t).then(() => toast("コピーしました")); }
+function startAdminEntry(){ S.adminEntry = true; S.sel = new Set(); S.form = {}; go("board"); }
+function endAdminEntry(){ S.adminEntry = false; S.adminTab = "list"; go("admin"); }
+
+function viewAdmin(){
+  if (!S.isAdmin) return viewLogin();
+  const tabs = [["list","受付"],["cal","カレンダー"],["sum","集計"],["set","設定"]];
+  const body = S.adminTab === "cal" ? adminCal() : S.adminTab === "sum" ? adminSum() : S.adminTab === "set" ? adminSet() : adminList();
+  return `<div class="subtabs">${tabs.map(([k, n]) => `<button class="${S.adminTab === k ? "on" : ""}" onclick="S.adminTab='${k}';render()">${n}</button>`).join("")}</div>${body}`;
+}
+const reqList = () => Object.entries(S.requests || {}).map(([id, r]) => ({id, ...r}));
+const active = r => !["rejected","cancelled"].includes(r.status);
+function matchFilter(r, f){
+  const t = today();
+  if (f === "today") return reqDates(r).includes(t) && ["approved","paid","done"].includes(r.status);
+  if (f === "closed") return !active(r);
+  if (f === "all") return true;
+  return r.status === f;
+}
+function reqCard(r){
+  const d = parse(r.date), t = today(), flags = [];
+  if (r.status === "approved" && r.date <= t) flags.push("未収");
+  if (r.status === "paid" && lastDate(r) <= t) flags.push("チェック待ち");
+  if (r.status === "applied") flags.push(`${fmtTs(r.createdAt)}受付`);
+  if (r.check && r.check.damage === "あり") flags.push("破損あり");
+  return `<button class="req" onclick="openDetail('${r.id}')">
+    <div class="dt"><small>${d.getMonth()+1}月</small><b>${d.getDate()}</b><small>${WD[d.getDay()]}曜</small></div>
+    <div><div class="who">${esc(r.group || r.name)}</div><div class="what">${esc(shortText(r))}${r.date2 ? `（〜${fmtDate(r.date2)}）` : ""}<br>${esc(CATS[r.cat].name)}・${esc(r.purpose || "")}</div></div>
+    <div class="right"><span class="pill ${ST[r.status].cls}">${ST[r.status].adm}</span><b>${yen(effFee(r))}</b>${flags.map(f => `<span class="flag">${esc(f)}</span>`).join("")}</div></button>`;
+}
+function adminList(){
+  const all = reqList();
+  const F = [["today","今日の利用"],["applied","新規申込"],["approved","承認済・未払"],["paid","支払済"],["done","完了"],["closed","取消・却下"],["all","すべて"]];
+  let list = all.filter(r => matchFilter(r, S.filter));
+  const desc = ["done","closed","all"].includes(S.filter);
+  list.sort((a, b) => (a.date + (a.createdAt || 0)).localeCompare(b.date + (b.createdAt || 0)) * (desc ? -1 : 1));
+  return `<div class="btns" style="margin:0 0 12px"><button class="btn ghost sm" onclick="startAdminEntry()">＋ 窓口・電話の申込を登録</button></div>
+    <div class="filters">${F.map(([k, n]) => `<button class="${S.filter === k ? "on" : ""}" onclick="S.filter='${k}';render()">${n}<i>${all.filter(r => matchFilter(r, k)).length}</i></button>`).join("")}</div>
+    ${list.length ? list.map(reqCard).join("") : `<div class="empty">${S.filter === "applied" ? "新しい申込はありません。" : "該当する申込はありません。"}</div>`}`;
+}
+function monthNav(){
+  const [y, m] = S.month.split("-").map(Number);
+  return `<div class="monthnav"><button onclick="shiftMonth(-1)" aria-label="前の月">‹</button><b>${y}年${m}月</b><button onclick="shiftMonth(1)" aria-label="次の月">›</button></div>`;
+}
+function shiftMonth(n){ const [y, m] = S.month.split("-").map(Number); const d = new Date(y, m-1+n, 1); S.month = `${d.getFullYear()}-${pad(d.getMonth()+1)}`; render(); }
+function adminCal(){
+  const [y, m] = S.month.split("-").map(Number), first = new Date(y, m-1, 1), dim = new Date(y, m, 0).getDate(), t = today();
+  const list = reqList().filter(active);
+  let h = `<section class="card">${monthNav()}<div class="cal">${[..."日月火水木金土"].map(w => `<div class="wh">${w}</div>`).join("")}`;
+  for (let i = 0; i < first.getDay(); i++) h += `<div class="cd blank"></div>`;
+  for (let d = 1; d <= dim; d++) {
+    const ds = `${y}-${pad(m)}-${pad(d)}`, items = list.filter(r => reqDates(r).includes(ds));
+    h += `<button class="cd ${ds === t ? "today" : ""}" onclick="openDay('${ds}')" aria-label="${fmtDate(ds)} ${items.length}件"><span class="n">${d}</span>
+      ${items.slice(0, 3).map(r => `<span class="ev ${ST[r.status].cls}">${esc(shortText(r))} ${esc(r.group || r.name)}</span>`).join("")}
+      ${items.length > 3 ? `<span class="more">他${items.length - 3}件</span>` : ""}</button>`;
+  }
+  return h + `</div><p class="hint">日付を押すと、その日の部屋ごとの利用者が見られます。色は状態（黄：新規、青：未払、緑：支払済、灰：完了）です。</p></section>`;
+}
+function openDay(ds){
+  const items = reqList().filter(r => active(r) && reqDates(r).includes(ds));
+  const who = (room, slot) => items.filter(r => (r.cells || []).includes(`${room}_${slot}`)).map(r => `<span class="ev ${ST[r.status].cls}" style="font-size:.75rem;height:auto">${esc(r.group || r.name)}</span>`).join("");
+  S.openId = null; S.sheetMode = null;
+  showSheet(`<div class="sheet-head"><div><h2>${fmtFull(ds)}</h2><small>${items.length}件の利用</small></div><button class="x" onclick="closeSheet()" aria-label="閉じる">×</button></div>
+    <div class="scroll"><table class="daytable"><thead><tr><th></th>${SLOTS.map(s => `<th>${s.name}</th>`).join("")}</tr></thead>
+    <tbody>${ROOMS.map(R => `<tr><th>${R.name}</th>${SLOTS.map(s => `<td>${who(R.id, s.id)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    ${items.map(reqCard).join("") || `<div class="empty">この日の利用はありません。</div>`}`);
+}
+function adminSum(){
+  const mo = S.month, list = reqList().filter(r => r.date.startsWith(mo)), act = list.filter(active), t = today();
+  const sum = a => a.reduce((s, r) => s + effFee(r), 0);
+  const paidList = act.filter(r => r.payment), unpaid = act.filter(r => r.status === "approved" || r.status === "applied");
+  const overdue = act.filter(r => r.status === "approved" && r.date <= t), waitCheck = act.filter(r => r.status === "paid" && lastDate(r) <= t);
+  const byCat = Object.keys(CATS).map(k => { const a = act.filter(r => r.cat === k); return {k, n:a.length, amt:sum(a)}; }).filter(x => x.n);
+  const koma = {}; ROOMS.forEach(R => koma[R.id] = 0);
+  act.forEach(r => reqDates(r).forEach(() => (r.cells || []).forEach(c => koma[c.split("_")[0]]++)));
+  return `<section class="card">${monthNav()}
+    <dl class="stat"><dt>利用件数（取消・却下を除く）</dt><dd>${act.length}件</dd>
+    <dt>使用料の合計</dt><dd>${yen(sum(act))}</dd>
+    <dt>入金済み</dt><dd>${yen(paidList.reduce((s, r) => s + Number(r.payment.amount || 0), 0))}（${paidList.length}件）</dd>
+    <dt>未入金（承認前を含む）</dt><dd class="${unpaid.length ? "warn" : ""}">${yen(sum(unpaid))}（${unpaid.length}件）</dd>
+    <dt>利用日を過ぎた未収</dt><dd class="${overdue.length ? "warn" : ""}">${overdue.length}件</dd>
+    <dt>使用後チェック待ち</dt><dd class="${waitCheck.length ? "warn" : ""}">${waitCheck.length}件</dd></dl></section>
+    ${overdue.length || waitCheck.length ? `<section class="card"><h2>対応が必要な申込</h2>${[...overdue, ...waitCheck].map(reqCard).join("")}</section>` : ""}
+    <section class="card"><h2>利用区分別</h2>${byCat.length ? `<table class="list"><thead><tr><th>区分</th><th class="r">件数</th><th class="r">使用料</th></tr></thead><tbody>
+      ${byCat.map(x => `<tr><td>${x.k === "K" ? "冠婚葬祭" : x.k + " " + CATS[x.k].name}</td><td class="r">${x.n}</td><td class="r">${yen(x.amt)}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">この月の利用はまだありません。</div>`}</section>
+    <section class="card"><h2>部屋別の利用コマ数</h2><table class="list"><tbody>${ROOMS.map(R => `<tr><td>${R.name}</td><td class="r">${koma[R.id]}コマ</td></tr>`).join("")}</tbody></table>
+    <p class="hint">午前・午後・夜間をそれぞれ1コマとして数えています。</p>
+    <div class="btns"><button class="btn ghost" onclick="exportCSV(false)">この月をCSVで出力</button></div></section>`;
+}
+const RULES = `{
+  "rules": {
+    "${ROOT}": {
+      "admins": {
+        "$uid": { ".read": "auth != null && auth.uid === $uid" }
+      },
+      "requests": {
+        ".read": "auth != null && root.child('${ROOT}/admins/' + auth.uid).exists()",
+        "$id": {
+          ".write": "auth != null && (root.child('${ROOT}/admins/' + auth.uid).exists() || (!data.exists() && newData.child('status').val() === 'applied'))"
+        }
+      },
+      "slots": {
+        ".read": true,
+        "$date": { "$key": {
+          ".write": "auth != null && (root.child('${ROOT}/admins/' + auth.uid).exists() || (!data.exists() && newData.child('status').val() === 'hold'))"
+        } }
+      },
+      "status": {
+        "$no": {
+          ".read": true,
+          ".write": "auth != null && (root.child('${ROOT}/admins/' + auth.uid).exists() || (!data.exists() && newData.child('status').val() === 'applied'))"
+        }
+      }
+    }
+  }
+}`;
+function adminSet(){
+  return `<section class="card"><h2>データ</h2>
+    <p style="margin-top:0">${DEMO ? "お試しモードで動いています。データはこの端末のブラウザにだけ保存されます。" : `Firebase に保存しています（${esc(S.user?.email || "")}）。`}</p>
+    <div class="btns"><button class="btn ghost" onclick="exportCSV(true)">全件をCSVで出力</button>
+    ${DEMO ? `<button class="btn ghost" onclick="addSamples()">サンプルの申込を入れる</button><button class="btn ghost" onclick="resetDemo()">お試しデータを消す</button>` : ""}
+    <button class="btn ghost" onclick="logout()">ログアウト</button></div></section>
+    <section class="card"><h2>Firebase の設定</h2>
+    <p style="margin-top:0">Authentication で「Google」と「匿名」を有効にし、Realtime Database のルールに次の内容を追加してください（既存アプリのルールがある場合は、"${ROOT}" の部分を同じ階層に並べます）。</p>
+    <pre class="rules">${esc(RULES)}</pre>
+    <div class="btns"><button class="btn ghost sm" onclick="copyText(RULES)">ルールをコピー</button></div>
+    <p class="hint">申込者は氏名・電話番号を含む申込本体（requests）を読めません。公開されるのは空き枠（slots）と、受付番号ごとの状況（status）だけです。</p></section>`;
+}
+
+/* ===== 詳細シート ===== */
+function showSheet(html){ const s = $("#sheet"); s.innerHTML = `<div class="scrim" onclick="closeSheet()"></div><div class="panel" role="dialog" aria-modal="true">${html}</div>`; s.classList.add("open"); document.body.style.overflow = "hidden"; }
+function closeSheet(){ const s = $("#sheet"); s.classList.remove("open"); s.innerHTML = ""; S.openId = null; S.sheetMode = null; document.body.style.overflow = ""; }
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#sheet").classList.contains("open")) closeSheet(); });
+function setMode(m){ S.sheetMode = m; openDetail(S.openId); }
+
+function openDetail(id){
+  const r = S.requests[id]; if (!r) return closeSheet();
+  S.openId = id; const m = S.sheetMode, t = today();
+  let h = `<div class="sheet-head"><div><span class="pill ${ST[r.status].cls}">${ST[r.status].adm}</span><h2>${esc(r.group || r.name)}</h2>
+    <small>受付番号 ${r.no}／${esc(r.source || "Web")}受付 ${fmtTs(r.createdAt)}</small></div><button class="x" onclick="closeSheet()" aria-label="閉じる">×</button></div>
+    <dl class="kv"><dt>利用日</dt><dd>${fmtFull(r.date)}${r.date2 ? `〜${fmtDate(r.date2)}` : ""}</dd>
+    <dt>部屋・時間</dt><dd>${esc(summaryText(r.cat, r.cells || [], r.days || 1))}${r.stay ? "（通夜宿泊あり）" : ""}</dd>
+    <dt>利用区分</dt><dd>${esc(CATS[r.cat].name)}</dd>
+    <dt>代表者</dt><dd>${esc(r.name)}</dd>
+    <dt>電話</dt><dd><a href="tel:${esc(r.tel)}">${esc(r.tel)}</a></dd>
+    ${r.email ? `<dt>メール</dt><dd><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></dd>` : ""}
+    <dt>利用目的</dt><dd>${esc(r.purpose)}${r.people ? `（${esc(r.people)}人）` : ""}</dd>
+    ${r.note ? `<dt>連絡事項</dt><dd>${esc(r.note)}</dd>` : ""}</dl>
+    ${feeTable(r.fee, r.feeAdj)}`;
+
+  // 操作
+  if (m === "adj") {
+    h += `<div class="sec"><h3>使用料の調整</h3><div class="grid2"><div class="field"><label for="a_amt">調整後の金額</label><input id="a_amt" type="number" inputmode="numeric" value="${effFee(r)}"></div>
+      <div class="field"><label for="a_rs">理由</label><input id="a_rs" value="${esc(r.feeAdj?.reason || "")}" placeholder="例 減免、準備時間の延長"></div></div>
+      <div class="btns"><button class="btn" onclick="saveAdj()">金額を変更する</button>${r.feeAdj ? `<button class="btn ghost" onclick="clearAdj()">料金表どおりに戻す</button>` : ""}<button class="btn ghost" onclick="setMode(null)">やめる</button></div></div>`;
+  } else if (m === "reject" || m === "cancel") {
+    const n = m === "reject" ? "却下" : "取消";
+    h += `<div class="sec"><h3>${n}の理由</h3><div class="field"><input id="x_rs" placeholder="${m === "reject" ? "例 先約あり、行事のため" : "例 申込者から連絡"}"></div>
+      <p class="hint" style="margin-top:0">${n}すると予約枠が空きに戻ります。</p>
+      <div class="btns"><button class="btn danger" onclick="closeReq('${m}')">${n}する</button><button class="btn ghost" onclick="setMode(null)">やめる</button></div></div>`;
+  } else if (m === "pay") {
+    h += `<div class="sec"><h3>支払いの記録</h3><div class="grid2">
+      <div class="field"><label for="p_m">支払方法</label><select id="p_m"><option>現金</option><option>振込</option><option>その他</option></select></div>
+      <div class="field"><label for="p_a">金額</label><input id="p_a" type="number" inputmode="numeric" value="${effFee(r)}"></div>
+      <div class="field"><label for="p_d">入金日</label><input id="p_d" type="date" value="${t}"></div>
+      <div class="field"><label for="p_n">領収書番号</label><input id="p_n" value="${nextReceiptNo()}"></div></div>
+      <div class="btns"><button class="btn" onclick="savePay()">支払いを記録する</button><button class="btn ghost" onclick="setMode(null)">やめる</button></div></div>`;
+  } else if (m === "check") {
+    h += `<div class="sec"><h3>使用後チェック</h3>${CHECK_ITEMS.map(([k, n]) => `<label class="check"><input type="checkbox" class="ck" value="${k}"><span>${n}</span></label>`).join("")}
+      <div class="field" style="margin-top:8px"><label for="c_dm">破損・汚損</label><select id="c_dm" onchange="document.getElementById('c_dn').hidden=this.value!=='あり'"><option>なし</option><option>あり</option></select></div>
+      <div class="field" id="c_dn" hidden><label for="c_dnote">破損・汚損の内容</label><textarea id="c_dnote"></textarea></div>
+      <div class="grid2"><div class="field"><label for="c_by">確認者</label><input id="c_by" value="${esc(localStorage.getItem("ogawaChecker") || "")}"></div>
+      <div class="field"><label for="c_nt">気づいたこと</label><input id="c_nt"></div></div>
+      <div class="btns"><button class="btn" onclick="saveCheck()">チェックを完了する</button><button class="btn ghost" onclick="setMode(null)">やめる</button></div></div>`;
+  } else {
+    const b = [];
+    if (r.status === "applied") b.push(`<button class="btn appr" onclick="approve()">承認する</button>`, `<button class="btn ghost" onclick="setMode('adj')">使用料を調整</button>`, `<button class="btn ghost" onclick="setMode('reject')">却下する</button>`);
+    if (r.status === "approved") b.push(`<button class="btn" onclick="setMode('pay')">支払いを記録する</button>`, `<button class="btn ghost" onclick="setMode('adj')">使用料を調整</button>`, `<button class="btn ghost" onclick="setMode('cancel')">取り消す</button>`);
+    if (r.status === "paid") b.push(`<button class="btn" onclick="setMode('check')">使用後チェック</button>`, `<button class="btn ghost" onclick="printReceipt()">領収書を印刷</button>`, `<button class="btn ghost" onclick="setMode('cancel')">取り消す</button>`);
+    if (r.status === "done") b.push(`<button class="btn ghost" onclick="printReceipt()">領収書を印刷</button>`);
+    if (b.length) h += `<div class="btns">${b.join("")}</div>`;
+    if (r.status === "paid" && lastDate(r) > t) h += `<p class="hint">使用後チェックは利用が終わってから行います。</p>`;
+  }
+
+  if (r.payment) h += `<div class="sec"><h3>支払い</h3><dl class="kv"><dt>入金日</dt><dd>${fmtFull(r.payment.paidAt)}</dd><dt>金額</dt><dd>${yen(r.payment.amount)}（${esc(r.payment.method)}）</dd><dt>領収書</dt><dd>No. ${esc(r.payment.receiptNo)}</dd></dl></div>`;
+  if (r.check) {
+    const miss = CHECK_ITEMS.filter(([k]) => !r.check.items?.[k]).map(([, n]) => n);
+    h += `<div class="sec"><h3>使用後チェック</h3><dl class="kv"><dt>確認日時</dt><dd>${fmtTs(r.check.at)}（${esc(r.check.checker || "")}）</dd>
+      <dt>確認項目</dt><dd>${miss.length ? `未確認：${esc(miss.join("、"))}` : "すべて確認済み"}</dd>
+      <dt>破損・汚損</dt><dd>${esc(r.check.damage)}${r.check.damageNote ? `：${esc(r.check.damageNote)}` : ""}</dd>
+      ${r.check.note ? `<dt>気づいたこと</dt><dd>${esc(r.check.note)}</dd>` : ""}</dl></div>`;
+  }
+  if (r.rejectReason || r.cancelReason) h += `<div class="sec"><h3>${r.status === "rejected" ? "却下" : "取消"}の理由</h3><p style="margin:0">${esc(r.rejectReason || r.cancelReason || "")}</p></div>`;
+  h += `<div class="sec"><h3>管理メモ</h3><textarea id="memo" style="width:100%;min-height:70px;border:1.5px solid var(--line);border-radius:8px;padding:10px">${esc(r.adminMemo || "")}</textarea>
+    <div class="btns"><button class="btn ghost sm" onclick="saveMemo()">メモを保存</button></div></div>`;
+  showSheet(h);
+}
+async function act(up, msg){
+  try { await store.update(up); toast(msg); S.sheetMode = null; if (S.openId) openDetail(S.openId); render(); }
+  catch(e) { console.warn(e); toast("保存できませんでした：" + (e.code || e.message)); }
+}
+function approve(){
+  const id = S.openId, r = S.requests[id], now = Date.now();
+  const up = {[`requests/${id}/status`]:"approved", [`requests/${id}/approvedAt`]:now, [`status/${r.no}/status`]:"approved"};
+  slotPaths(r).forEach(p => up[`${p}/status`] = "fixed");
+  act(up, "承認しました");
+}
+function closeReq(kind){
+  const id = S.openId, r = S.requests[id], reason = $("#x_rs").value.trim();
+  const up = {[`requests/${id}/status`]:kind === "reject" ? "rejected" : "cancelled", [`requests/${id}/${kind === "reject" ? "rejectReason" : "cancelReason"}`]:reason || null,
+    [`requests/${id}/closedAt`]:Date.now(), [`status/${r.no}/status`]:kind === "reject" ? "rejected" : "cancelled"};
+  slotPaths(r).forEach(p => { const cur = S.slots[p.split("/")[1]]?.[p.split("/")[2]]; if (!cur || cur.id === id) up[p] = null; });
+  act(up, kind === "reject" ? "却下しました" : "取り消しました");
+}
+function saveAdj(){
+  const id = S.openId, r = S.requests[id], amt = Number($("#a_amt").value);
+  if (!(amt >= 0)) return toast("金額を入力してください");
+  act({[`requests/${id}/feeAdj`]:{amount:amt, reason:$("#a_rs").value.trim()}, [`status/${r.no}/fee`]:amt}, "使用料を変更しました");
+}
+function clearAdj(){ const id = S.openId, r = S.requests[id]; act({[`requests/${id}/feeAdj`]:null, [`status/${r.no}/fee`]:r.fee.total}, "料金表どおりに戻しました"); }
+function nextReceiptNo(){
+  const y = today().slice(0, 4), n = reqList().filter(r => r.payment?.receiptNo?.startsWith(y)).length + 1;
+  return `${y}-${String(n).padStart(3, "0")}`;
+}
+function savePay(){
+  const id = S.openId, r = S.requests[id], amt = Number($("#p_a").value), d = $("#p_d").value;
+  if (!(amt >= 0) || !d) return toast("金額と入金日を入力してください");
+  act({[`requests/${id}/payment`]:{method:$("#p_m").value, amount:amt, paidAt:d, receiptNo:$("#p_n").value.trim(), at:Date.now()},
+    [`requests/${id}/status`]:"paid", [`status/${r.no}/status`]:"paid"}, "支払いを記録しました");
+}
+function saveCheck(){
+  const id = S.openId, r = S.requests[id], items = {};
+  document.querySelectorAll(".ck").forEach(c => { if (c.checked) items[c.value] = true; });
+  const missing = CHECK_ITEMS.length - Object.keys(items).length;
+  if (missing && !confirm(`確認していない項目が${missing}つあります。このまま完了にしますか？`)) return;
+  const by = $("#c_by").value.trim(); try { localStorage.setItem("ogawaChecker", by); } catch(e) {}
+  const dm = $("#c_dm").value;
+  act({[`requests/${id}/check`]:clean({items, damage:dm, damageNote:dm === "あり" ? $("#c_dnote").value.trim() : undefined, checker:by, note:$("#c_nt").value.trim(), at:Date.now()}),
+    [`requests/${id}/status`]:"done", [`status/${r.no}/status`]:"done"}, "使用後チェックを完了しました");
+}
+function saveMemo(){ act({[`requests/${S.openId}/adminMemo`]:$("#memo").value.trim() || null}, "メモを保存しました"); }
+function printReceipt(){
+  const r = S.requests[S.openId], p = r.payment; if (!p) return;
+  $("#print").innerHTML = `<div class="rc"><h1>領収書</h1><p class="meta">No. ${esc(p.receiptNo)}<br>${fmtFull(p.paidAt)}</p>
+    <p class="to">${esc(r.group || r.name)} 様</p><p class="amt">${yen(p.amount)} -</p>
+    <p>但し ${esc(HALL.name)} 使用料として</p>
+    <table>${(r.fee.lines || []).map(l => `<tr><td>${fmtFull(r.date)}${r.date2 ? `〜${fmtDate(r.date2)}` : ""} ${esc(l.label)}</td><td>${yen(l.amount)}</td></tr>`).join("")}
+    ${r.feeAdj ? `<tr><td>調整（${esc(r.feeAdj.reason || "")}）</td><td>${yen(r.feeAdj.amount)}</td></tr>` : ""}</table>
+    <p>上記の金額を正に領収いたしました。</p><div class="issuer">${esc(HALL.issuer)}<span class="stamp">印</span></div></div>`;
+  window.print();
+}
+function exportCSV(all){
+  const list = reqList().filter(r => all || r.date.startsWith(S.month)).sort((a, b) => a.date.localeCompare(b.date));
+  const rows = [["受付番号","受付日時","受付方法","利用日","2日目","利用区分","団体名","代表者","電話","メール","利用目的","人数","部屋・時間帯","使用料","状態","支払方法","入金日","入金額","領収書番号","チェック日時","確認者","破損・汚損","管理メモ"]];
+  list.forEach(r => rows.push([r.no, fmtTs(r.createdAt), r.source, r.date, r.date2 || "", CATS[r.cat].name, r.group, r.name, r.tel, r.email, r.purpose, r.people,
+    summaryText(r.cat, r.cells || [], r.days || 1), effFee(r), ST[r.status].adm, r.payment?.method, r.payment?.paidAt, r.payment?.amount, r.payment?.receiptNo,
+    r.check ? fmtTs(r.check.at) : "", r.check?.checker, r.check ? r.check.damage + (r.check.damageNote ? "：" + r.check.damageNote : "") : "", r.adminMemo]));
+  const csv = "\ufeff" + rows.map(row => row.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], {type:"text/csv"}));
+  a.download = `小川会館_申込_${all ? "全件" : S.month}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/* ===== お試しモード用 ===== */
+async function addSamples(){
+  const t = today(), mk = async (date, cat, cells, group, name, purpose, status, extra = {}) => {
+    const id = genId(), no = await genNo(), fee = calcFee(cat, cells, 1);
+    const req = clean({no, createdAt:Date.now(), source:"Web", cat, date, date2:null, cells, days:1, fee, group, name, tel:"042-000-0000", purpose, people:"12", status, ...extra});
+    await store.update(buildUpdate(id, req));
+  };
+  await mk(addDays(t, 1), "C", ["HA_am","HA_pm","HA_ev"], "小川老人会", "小川 一郎", "健康体操", "applied");
+  await mk(addDays(t, 2), "A", ["WA_pm"], "小川書道の会", "佐藤 花子", "書道教室", "approved", {approvedAt:Date.now()});
+  await mk(t, "D", ["KG_ev"], "小川自治会", "鈴木 次郎", "役員会", "paid", {payment:{method:"現金", amount:100, paidAt:t, receiptNo:nextReceiptNo(), at:Date.now()}});
+  await mk(addDays(t, 5), "B", ["HB_am","HB_pm"], "", "田中 美咲", "ピアノ発表会の練習", "applied");
+  toast("サンプルを入れました");
+}
+function resetDemo(){ if (!confirm("お試しデータをすべて消します。よろしいですか？")) return; demoTree = {}; try { localStorage.removeItem(DEMO_KEY); } catch(e) {} store.update({}); S.slots = {}; S.requests = {}; closeSheet(); render(); toast("消去しました"); }
+
+/* ===== 起動 ===== */
+function init(){
+  if (!DEMO) {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database(); auth = firebase.auth();
+    auth.getRedirectResult().catch(() => {});
+    auth.onAuthStateChanged(async u => {
+      S.user = u;
+      if (!u) { try { await auth.signInAnonymously(); } catch(e) { console.warn(e); } return; }
+      if (u.isAnonymous) return setAdmin(false);
+      const ok = await store.get(`admins/${u.uid}`).catch(() => null);
+      setAdmin(!!ok);
+    });
+  }
+  store.on("slots", v => { S.slots = v || {}; if (S.view === "board") render(); });
+  render();
+}
+init();
+</script>
+</body>
+</html>
