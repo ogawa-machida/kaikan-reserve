@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#2E5A48">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="小川会館">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>小川会館 予約受付</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232E5A48'/%3E%3Crect x='14' y='14' width='36' height='40' rx='3' fill='%23fff'/%3E%3Ccircle cx='18' cy='16' r='5' fill='%23B08A3E'/%3E%3Cpath d='M22 28h20M22 36h20M22 44h12' stroke='%232E5A48' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -276,13 +282,15 @@ table.imp{font-size:.82rem}table.imp td{vertical-align:top}table.imp tr.ng td{co
 .chip span small{display:block;font-size:.75rem;color:var(--sub);margin-top:2px}
 .chip:disabled{opacity:.5;cursor:not-allowed}
 .orgbox{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:8px}
+.topr{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.badge.install{border:0;cursor:pointer;background:#fff;color:var(--board-deep);font-weight:700;padding:6px 12px;font-size:.78rem;font-family:inherit}
 </style>
 </head>
 <body>
 <header class="top">
   <div class="top-in">
     <div class="slip"><h1>小川会館 予約受付</h1><small>申込・空き状況・料金</small></div>
-    <div><span class="badge" id="demoBadge" hidden>お試しモード</span> <span class="badge admin" id="adminBadge" hidden>管理者</span></div>
+    <div class="topr"><button class="badge install" id="installBtn" hidden onclick="installApp()">アプリとして入れる</button><span class="badge" id="demoBadge" hidden>お試しモード</span> <span class="badge admin" id="adminBadge" hidden>管理者</span></div>
   </div>
 </header>
 <main id="app"></main>
@@ -1667,6 +1675,20 @@ function init(){
   store.on("slots", v => { S.slots = v || {}; if (S.view === "board") render(); });
 }
 init();
+
+/* ===== アプリとしてインストール ===== */
+let deferredPrompt = null;
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(e => console.warn("SW", e)));
+}
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredPrompt = e; $("#installBtn").hidden = false; });
+window.addEventListener("appinstalled", () => { deferredPrompt = null; $("#installBtn").hidden = true; toast("ホーム画面に追加しました"); });
+async function installApp(){
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice.catch(() => {});
+  deferredPrompt = null; $("#installBtn").hidden = true;
+}
 
 </script>
 </body>
