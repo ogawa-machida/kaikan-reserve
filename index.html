@@ -256,6 +256,22 @@ pre.rules{background:#F4F6F4;border:1px solid var(--line);border-radius:8px;padd
   .rc .issuer{text-align:right;margin-top:10mm;font-size:12pt;position:relative;padding-right:22mm}
   .rc .stamp{position:absolute;right:0;top:-3mm;width:18mm;height:18mm;border:1px solid #000;border-radius:50%;display:grid;place-items:center;font-size:10pt}
 }
+.note.ok{background:var(--paid-soft);border-color:var(--paid)}
+.note.ng{background:var(--danger-soft);border-color:var(--danger)}
+.req.static{cursor:default}.req.static:hover{border-color:var(--line)}
+.req .right small{display:block;font-size:.72rem;color:var(--sub)}
+.subtabs button{padding:0 2px;font-size:.85rem}
+.subtabs .cnt{font-style:normal;display:inline-block;min-width:18px;height:18px;line-height:18px;border-radius:9px;background:var(--danger);color:#fff;font-size:.7rem;margin-left:3px;padding:0 5px}
+details.more-box{margin-top:10px}details.more-box summary{cursor:pointer;color:var(--sub);font-size:.9rem;padding:6px 0}
+.gbtn{background:#fff;color:var(--ink);border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;gap:10px}
+.gbtn:hover{background:#F5F7F5}.gbtn svg{width:20px;height:20px}
+.or{display:flex;align-items:center;gap:10px;color:var(--sub);font-size:.82rem;margin:16px 0 10px}
+.or::before,.or::after{content:"";flex:1;border-top:1px solid var(--line)}
+.filebtn{display:inline-flex;align-items:center;cursor:pointer;position:relative}
+.filebtn input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+h3.sub{font-size:.95rem;margin:14px 0 8px;padding-left:8px;border-left:4px solid var(--board)}
+h3.sub:first-of-type{margin-top:4px}
+table.imp{font-size:.82rem}table.imp td{vertical-align:top}table.imp tr.ng td{color:var(--danger);background:#FDF6F5}
 </style>
 </head>
 <body>
@@ -268,7 +284,7 @@ pre.rules{background:#F4F6F4;border:1px solid var(--line);border-radius:8px;padd
 <main id="app"></main>
 <nav class="tabs" aria-label="画面の切り替え">
   <button data-v="board" onclick="go('board')"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>空き・申込</button>
-  <button data-v="lookup" onclick="go('lookup')"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>申込の確認</button>
+  <button data-v="my" onclick="go('my')"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>マイページ</button>
   <button data-v="fees" onclick="go('fees')"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 10h16M10 10v10"/></svg>料金表</button>
   <button data-v="admin" onclick="go('admin')"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>管理</button>
 </nav>
@@ -315,8 +331,7 @@ const CATS = {
   A:{name:"登録会員"},
   B:{name:"一般"},
   C:{name:"老人会・婦人会・子供会"},
-  D:{name:"福祉活動会員・加盟自治会"},
-  K:{name:"冠婚葬祭（全館貸切）"}
+  D:{name:"福祉活動会員・加盟自治会"}
 };
 // [1枠（午前・午後・夜間それぞれ）, 全日]
 const FEES = {
@@ -325,19 +340,24 @@ const FEES = {
   C:{HA:[450,1200],HB:[450,1200],WA:[300,800],WB:[250,650],KG:[200,550]},
   D:{HA:[200,600],HB:[200,600],WA:[100,300],WB:[100,300],KG:[100,300]}
 };
-const CEREMONY = {room:15000, ac:1500};
 const CHECK_ITEMS = [
   ["clean","床・机の清掃"],["trash","ゴミの持ち帰り"],["layout","机・椅子・備品を元の位置へ"],
   ["ac","冷暖房・換気扇の停止"],["light","消灯"],["water","ガス・水道の確認"],
   ["lock","窓・戸の施錠"],["shoe","下足入れの整理"],["key","鍵の返却"]
 ];
 const ST = {
-  applied:{pub:"申込を受け付けました（確認中）",adm:"新規申込",cls:"hold"},
-  approved:{pub:"承認済み・お支払い待ち",adm:"承認済・未払",cls:"appr"},
+  tentative:{pub:"仮予約（利用者登録の承認待ち）",adm:"仮予約",cls:"hold"},
+  applied:{pub:"仮予約",adm:"仮予約",cls:"hold"},
+  approved:{pub:"予約確定・お支払い待ち",adm:"確定・未払",cls:"appr"},
   paid:{pub:"お支払い済み",adm:"支払済",cls:"paid"},
   done:{pub:"ご利用完了",adm:"完了",cls:"done"},
   rejected:{pub:"お受けできませんでした",adm:"却下",cls:"danger"},
   cancelled:{pub:"取り消しになりました",adm:"取消",cls:"danger"}
+};
+const USER_ST = {
+  pending:{name:"登録審査中",cls:"hold"},
+  active:{name:"登録済み",cls:"paid"},
+  rejected:{name:"登録不可",cls:"danger"}
 };
 
 /* ===== 小道具 ===== */
@@ -356,18 +376,21 @@ const fmtTs = t => { if(!t) return ""; const d = new Date(t); return `${d.getMon
 const clean = o => JSON.parse(JSON.stringify(o));
 const slotName = id => SLOTS.find(s => s.id === id).name;
 const slotOrder = (a, b) => SLOTS.findIndex(s => s.id === a) - SLOTS.findIndex(s => s.id === b);
-function toast(msg){ const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 3200); }
+const isTent = r => r.status === "tentative" || r.status === "applied";
+function toast(msg){ const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 3400); }
 
 /* ===== 状態 ===== */
 const S = {
   view:"board", date:today(), stripStart:today(), cat:"A", sel:new Set(), days:1, stay:false,
-  form:{}, slots:{}, requests:{}, isAdmin:false, adminTab:"list", filter:"applied",
-  month:today().slice(0,7), user:null, adminEntry:false, openId:null, sheetMode:null
+  form:{}, slots:{}, requests:{}, users:{}, adminReqs:{}, roster:{}, imp:null,
+  user:null, me:null, myReqs:{}, myAdminReq:null, isAdmin:false,
+  adminTab:"list", filter:"tentative", month:today().slice(0,7),
+  adminEntry:false, openId:null, openUid:null, sheetMode:null
 };
 
 /* ===== 保存先（Firebase / お試しモード） ===== */
 const DEMO = !FIREBASE_CONFIG.apiKey || typeof firebase === "undefined";
-let db = null, auth = null, unsubReq = null;
+let db = null, auth = null;
 const demoListeners = [];
 const DEMO_KEY = "ogawaHallDemo";
 let demoTree = {};
@@ -388,7 +411,7 @@ const store = {
     if (DEMO) {
       for (const k in obj) dset(k, obj[k]);
       try { localStorage.setItem(DEMO_KEY, JSON.stringify(demoTree)); } catch(e) {}
-      demoListeners.forEach(l => l.cb(clean(dget(l.p))));
+      demoListeners.slice().forEach(l => l.cb(clean(dget(l.p))));
       return;
     }
     const o = {}; for (const k in obj) o[`${ROOT}/${k}`] = obj[k] === undefined ? null : obj[k];
@@ -399,11 +422,127 @@ const store = {
     const r = db.ref(`${ROOT}/${p}`); const h = s => cb(s.val());
     r.on("value", h, e => console.warn(p, e.message));
     return () => r.off("value", h);
+  },
+  onQuery(p, key, val, cb){
+    if (DEMO) {
+      const l = {p, cb:v => { const o = {}; Object.entries(v || {}).forEach(([k, x]) => { if (x && x[key] === val) o[k] = x; }); cb(o); }};
+      demoListeners.push(l); l.cb(clean(dget(p)));
+      return () => { const i = demoListeners.indexOf(l); if (i >= 0) demoListeners.splice(i, 1); };
+    }
+    const r = db.ref(`${ROOT}/${p}`).orderByChild(key).equalTo(val); const h = s => cb(s.val());
+    r.on("value", h, e => console.warn(p, e.message));
+    return () => r.off("value", h);
   }
 };
-async function ensureAuth(){
-  if (DEMO) return;
-  if (!auth.currentUser) await auth.signInAnonymously();
+
+/* ===== ログイン ===== */
+let userUnsubs = [], adminUnsubs = [];
+function watchUser(u){
+  userUnsubs.forEach(f => f()); userUnsubs = [];
+  S.user = u; S.me = null; S.myReqs = {}; S.myAdminReq = null;
+  setAdmin(false);
+  if (u) {
+    userUnsubs.push(store.on(`admins/${u.uid}`, v => setAdmin(v === true)));
+    let tried = false;
+    userUnsubs.push(store.on(`users/${u.uid}`, v => { S.me = v; applyMeToSelection(); if (S.view !== "form") render(); if (!v && !tried) { tried = true; tryRosterActivate(); } }));
+    userUnsubs.push(store.on(`adminRequests/${u.uid}`, v => { S.myAdminReq = v; if (S.view === "admin") render(); }));
+    userUnsubs.push(store.onQuery("requests", "uid", u.uid, v => { S.myReqs = v || {}; if (S.view === "my") render(); }));
+  }
+  render();
+}
+const DEMO_USERS = [
+  {uid:"demo-user-1", displayName:"デモ利用者1", email:"user1@example.com"},
+  {uid:"demo-user-2", displayName:"デモ利用者2", email:"user2@example.com"}
+];
+const emailKey = e => { e = String(e || "").trim().toLowerCase(); return e && e.includes("@") && !/[#$\[\]\/]/.test(e) ? e.replace(/\./g, ",") : ""; };
+const isVerified = u => !!u && (DEMO || u.emailVerified !== false);
+const AUTH_ERR = {
+  "auth/invalid-email":"メールアドレスの形式が正しくありません",
+  "auth/invalid-credential":"メールアドレスかパスワードが違います",
+  "auth/invalid-login-credentials":"メールアドレスかパスワードが違います",
+  "auth/wrong-password":"メールアドレスかパスワードが違います",
+  "auth/user-not-found":"このメールアドレスのアカウントはありません。「はじめての方はアカウントを作る」から登録してください",
+  "auth/email-already-in-use":"このメールアドレスはすでに登録されています。ログインしてください",
+  "auth/weak-password":"パスワードは6文字以上にしてください",
+  "auth/missing-password":"パスワードを入力してください",
+  "auth/too-many-requests":"試行回数が多すぎます。しばらくしてからお試しください",
+  "auth/network-request-failed":"通信できませんでした。電波の状態を確認してください",
+  "auth/operation-not-allowed":"このログイン方法が有効になっていません（Firebase の設定が必要です）",
+  "auth/unauthorized-domain":"このアドレスからのログインが許可されていません（Firebase の承認済みドメインに追加が必要です）",
+  "auth/account-exists-with-different-credential":"このメールアドレスは別のログイン方法で登録されています"
+};
+const authMsg = e => AUTH_ERR[e.code] || ("ログインできませんでした：" + (e.code || e.message));
+function signIn(mode){
+  mode = mode === "signup" ? "signup" : "login"; const up = mode === "signup";
+  showSheet(`<div class="sheet-head"><div><h2>${up ? "アカウントを作る" : "ログイン"}</h2><small>Google アカウントか、メールアドレスとパスワードで${up ? "登録" : "ログイン"}します</small></div><button class="x" onclick="closeSheet()" aria-label="閉じる">×</button></div>
+    <button class="btn wide gbtn" onclick="googleSignIn()"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.7 13.2l7.8 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.3.8-4.7l-7.8-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.8l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.8 6.1C6.6 42.6 14.6 48 24 48z"/></svg>Google で${up ? "登録" : "ログイン"}</button>
+    <div class="or"><span>または メールアドレスで</span></div>
+    <div class="field"><label for="lg_email">メールアドレス</label><input id="lg_email" type="email" autocomplete="email" inputmode="email"></div>
+    <div class="field"><label for="lg_pw">パスワード${up ? "<em style='color:var(--sub)'>6文字以上</em>" : ""}</label><input id="lg_pw" type="password" autocomplete="${up ? "new-password" : "current-password"}" onkeydown="if(event.key==='Enter')emailAuth('${mode}')"></div>
+    <button class="btn wide" style="margin-top:2px" onclick="emailAuth('${mode}')">${up ? "アカウントを作る" : "メールアドレスでログイン"}</button>
+    <div class="btns" style="justify-content:space-between">${up ? `<button class="link" onclick="signIn('login')">アカウントをお持ちの方はログイン</button>`
+      : `<button class="link" onclick="signIn('signup')">はじめての方はアカウントを作る</button><button class="link" onclick="resetPw()">パスワードを忘れた</button>`}</div>
+    ${DEMO ? `<div class="infobox"><h3>お試しモード</h3><p style="margin-top:0">メールアドレスとパスワードは何を入れてもログインできます。下のボタンでも入れます。</p>
+      <div class="btns" style="margin-top:0">${DEMO_USERS.map((u, i) => `<button class="btn ghost sm" onclick="demoSignIn(${i})">${u.displayName}</button>`).join("")}</div>
+      <p style="margin:12px 0 4px">管理者として入る（PIN「${esc(HALL.demoPin)}」）</p><div class="row"><input id="pin2" type="password" inputmode="numeric" aria-label="PIN"><button class="btn" onclick="demoAdminPin('pin2')">管理者で入る</button></div></div>` : ""}`);
+}
+async function googleSignIn(){
+  if (DEMO) return demoSignIn(0);
+  const p = new firebase.auth.GoogleAuthProvider();
+  try { await auth.signInWithPopup(p); closeSheet(); }
+  catch(e) {
+    if (["auth/popup-blocked","auth/operation-not-supported-in-this-environment","auth/cancelled-popup-request"].includes(e.code)) await auth.signInWithRedirect(p);
+    else if (e.code !== "auth/popup-closed-by-user") toast(authMsg(e));
+  }
+}
+async function emailAuth(mode){
+  const email = $("#lg_email").value.trim(), pw = $("#lg_pw").value;
+  if (!email || !pw) return toast("メールアドレスとパスワードを入力してください");
+  if (DEMO) {
+    const u = {uid:"demo-" + emailKey(email).replace(/[^a-z0-9]/g, "").slice(0, 24), displayName:"", email, emailVerified:true};
+    closeSheet(); try { localStorage.setItem("ogawaDemoUser", JSON.stringify(u)); } catch(e) {} return watchUser(u);
+  }
+  try {
+    if (mode === "signup") {
+      const c = await auth.createUserWithEmailAndPassword(email, pw);
+      try { await c.user.sendEmailVerification(); } catch(e) {}
+      toast("アカウントを作りました。確認メールを送ったので、メールのリンクを開いてください");
+    } else await auth.signInWithEmailAndPassword(email, pw);
+    closeSheet();
+  } catch(e) { toast(authMsg(e)); }
+}
+async function resetPw(){
+  const email = $("#lg_email").value.trim(); if (!email) return toast("メールアドレスを入力してから押してください");
+  if (DEMO) return toast("お試しモードではメールは送られません");
+  try { await auth.sendPasswordResetEmail(email); toast("パスワード再設定のメールを送りました"); } catch(e) { toast(authMsg(e)); }
+}
+async function resendVerify(){ try { await auth.currentUser.sendEmailVerification(); toast("確認メールを送りました"); } catch(e) { toast(authMsg(e)); } }
+async function reloadUser(){
+  try { await auth.currentUser.reload(); await auth.currentUser.getIdToken(true); watchUser(auth.currentUser); if (!auth.currentUser.emailVerified) toast("まだ確認が済んでいません。メールのリンクを開いてください"); }
+  catch(e) { toast(authMsg(e)); }
+}
+async function tryRosterActivate(){
+  const u = S.user; if (!u || S.me || !isVerified(u)) return;
+  const key = emailKey(u.email); if (!key) return;
+  let r = null; try { r = await store.get(`rosterByEmail/${key}`); } catch(e) { return; }
+  if (!r || !CATS[r.cat] || S.me || S.user !== u) return;
+  const now = Date.now();
+  try {
+    await store.update({[`users/${u.uid}`]:clean({group:r.group || "", name:r.name || u.displayName || "", tel:r.tel || "", email:u.email, cat:r.cat, status:"active", source:"名簿", createdAt:now, approvedAt:now})});
+    toast("名簿に登録があったため、利用者登録が完了しました");
+  } catch(e) { console.warn(e); }
+}
+function demoSignIn(i){ closeSheet(); const u = {...DEMO_USERS[i], emailVerified:true}; try { localStorage.setItem("ogawaDemoUser", JSON.stringify(u)); } catch(e) {} watchUser(u); }
+async function demoAdminPin(inputId){
+  if ($("#" + inputId).value !== HALL.demoPin) return toast("PINが違います");
+  const u = {uid:"demo-admin", displayName:"デモ管理者", email:"admin@example.com"};
+  await store.update({"admins/demo-admin":true, "adminRequests/demo-admin":{name:"デモ管理者", role:"管理人", email:u.email, status:"approved", at:Date.now()}});
+  closeSheet(); try { localStorage.setItem("ogawaDemoUser", JSON.stringify(u)); } catch(e) {} watchUser(u);
+}
+async function signOut(){
+  closeSheet(); S.adminEntry = false; S.form = {};
+  if (DEMO) { try { localStorage.removeItem("ogawaDemoUser"); } catch(e) {} return watchUser(null); }
+  await auth.signOut();
 }
 
 /* ===== 料金・空き判定 ===== */
@@ -425,10 +564,6 @@ function groupCells(cells){
   Object.values(by).forEach(a => a.sort(slotOrder)); return by;
 }
 function calcFee(cat, cells, days){
-  if (cat === "K") {
-    const a = (CEREMONY.room + CEREMONY.ac) * days;
-    return {total:a, lines:[{label:`全館貸切 ${days}日分（室料${yen(CEREMONY.room)}＋空調料${yen(CEREMONY.ac)}）`, amount:a}]};
-  }
   const by = groupCells(cells), lines = []; let total = 0;
   ROOMS.forEach(R => {
     const ss = by[R.id], f = FEES[cat][R.id]; if (!ss || !f) return;
@@ -438,27 +573,30 @@ function calcFee(cat, cells, days){
   return {total, lines};
 }
 function summaryText(cat, cells, days){
-  if (cat === "K") return `全館貸切${days === 2 ? "（2日間）" : ""}`;
   const by = groupCells(cells);
   return ROOMS.filter(R => by[R.id]).map(R => `${R.name} ${by[R.id].length === 3 ? "全日" : by[R.id].map(slotName).join("・")}`).join("／");
 }
 function shortText(r){
-  if (r.cat === "K") return "全館貸切";
   const by = groupCells(r.cells || []);
   return ROOMS.filter(R => by[R.id]).map(R => R.short + (by[R.id].length === 3 ? "全日" : by[R.id].map(slotName).join(""))).join(" ");
 }
-function ceremonyOK(date){ return SLOTS.every(s => cellState(date, "ALL", s.id) === "free"); }
 function currentSelection(){
-  if (S.cat === "K") {
-    const ok = ceremonyOK(S.date) && (S.days === 1 || ceremonyOK(addDays(S.date, 1)));
-    return {cells: ok ? SLOTS.map(s => `ALL_${s.id}`) : [], ok};
-  }
   return {cells:[...S.sel], ok:S.sel.size > 0};
 }
 const effFee = r => r.feeAdj ? r.feeAdj.amount : (r.fee ? r.fee.total : 0);
 const reqDates = r => [r.date, r.date2].filter(Boolean);
 const lastDate = r => r.date2 || r.date;
 function slotPaths(r){ const out = []; reqDates(r).forEach(d => (r.cells || []).forEach(c => out.push(`slots/${d}/${c}`))); return out; }
+const isActiveUser = () => !!(S.me && S.me.status === "active");
+function allowedCats(){
+  if (S.adminEntry) return Object.keys(CATS);
+  if (isActiveUser()) return [S.me.cat];
+  return ["A","B","C","D"];
+}
+function applyMeToSelection(){
+  const a = allowedCats();
+  if (!a.includes(S.cat)) { S.cat = a[0]; S.sel = new Set(); }
+}
 
 /* ===== 画面の切り替え ===== */
 function navOf(v){ return ["form","done"].includes(v) ? "board" : v; }
@@ -472,21 +610,30 @@ function render(){
     v === "board" ? viewBoard() :
     v === "form" ? viewForm() :
     v === "done" ? viewDone() :
-    v === "lookup" ? viewLookup() :
+    v === "my" ? viewMy() :
     v === "fees" ? viewFees() : viewAdmin();
   if (v === "board") { const on = document.querySelector(".day.on"); if (on) on.scrollIntoView({block:"nearest", inline:"center"}); }
 }
 
 /* ===== 空き状況・申込 ===== */
+function userNote(){
+  if (S.adminEntry) return `<div class="note">窓口受付モード：電話や窓口で受けた申込を代わりに登録します（予約確定になります）。 <button class="link" onclick="endAdminEntry()">終了する</button></div>`;
+  const me = S.me;
+  if (!S.user) return `<div class="note">空き状況は誰でも見られます。申し込むときにログインします（Google アカウントかメールアドレス）。はじめての方は、申込の内容がそのまま<b>利用者登録の申請</b>になり、管理人が承認するまでは<b>仮予約</b>です。</div>`;
+  if (!me) return `<div class="note">はじめての申込です。申込の内容で利用者登録を申請します。管理人が承認するまでは<b>仮予約</b>です。</div>`;
+  if (me.status === "pending") return `<div class="note">利用者登録の審査中です。申込は<b>仮予約</b>になり、登録が承認されると予約確定になります。</div>`;
+  if (me.status === "active") return `<div class="note ok">登録済み：${esc(me.group || me.name)}（${esc(CATS[me.cat].name)}）。申込はそのまま<b>予約確定</b>になります。</div>`;
+  return `<div class="note ng">利用者登録が承認されていないため、Webからは申し込めません。${esc(HALL.contact)}。</div>`;
+}
 function viewBoard(){
-  let h = "";
-  if (S.adminEntry) h += `<div class="note">窓口受付モード：電話や窓口で受けた申込を代わりに登録します。 <button class="link" onclick="endAdminEntry()">終了する</button></div>`;
-  h += `<section class="card"><h2>利用区分</h2><div class="chips">${Object.entries(CATS).map(([k, c]) =>
-    `<button class="chip ${S.cat === k ? "on" : ""}" onclick="setCat('${k}')" aria-pressed="${S.cat === k}"><b>${k === "K" ? "冠" : k}</b>${c.name}</button>`).join("")}</div>
-    ${S.cat === "K" ? `<p class="hint">会員の利用に限ります。全館貸切、1日につき${yen(CEREMONY.room + CEREMONY.ac)}（室料15,000円＋空調料1,500円）。葬儀は通夜・告別式の2日間、通夜の宿泊ができます。その他の光熱費は使用料に含まれます。</p>` : ""}
+  const cats = allowedCats();
+  let h = userNote();
+  h += `<section class="card"><h2>利用区分</h2><div class="chips">${cats.map(k =>
+    `<button class="chip ${S.cat === k ? "on" : ""}" onclick="setCat('${k}')" aria-pressed="${S.cat === k}"><b>${k}</b>${CATS[k].name}</button>`).join("")}</div>
+    ${!S.adminEntry && !isActiveUser() ? `<p class="hint">区分は、利用者登録を承認するときに管理人が確認します。</p>` : ""}
     ${S.cat === "C" || S.cat === "D" ? `<p class="hint">この区分では全室の料金設定がないため、部屋ごとにお選びください。</p>` : ""}</section>`;
   h += dateStrip();
-  h += S.cat === "K" ? ceremonyPanel() : boardTable();
+  h += boardTable();
   h += selectionBar();
   return h;
 }
@@ -522,25 +669,16 @@ function boardTable(){
   h += `</div><p class="hint">同じ部屋の午前・午後・夜間をすべて選ぶと全日料金になります。</p></section>`;
   return h;
 }
-function ceremonyPanel(){
-  const d2 = addDays(S.date, 1), ok1 = ceremonyOK(S.date), ok2 = ceremonyOK(d2);
-  const box = (d, ok) => `<div class="cday ${ok ? "ok" : "ng"}"><b>${fmtDate(d)}</b><span>${ok ? "全館貸切できます" : "使用中の部屋があるため貸切できません"}</span></div>`;
-  return `<section class="card"><h2>全館貸切の空き</h2>
-    <div class="ceremony">${box(S.date, ok1)}${S.days === 2 ? box(d2, ok2) : ""}</div>
-    <label class="check"><input type="checkbox" ${S.days === 2 ? "checked" : ""} onchange="S.days=this.checked?2:1;render()"><span>葬儀として通夜・告別式の2日間で申し込む</span></label>
-    ${S.days === 2 ? `<label class="check"><input type="checkbox" ${S.stay ? "checked" : ""} onchange="S.stay=this.checked"><span>通夜の宿泊をする</span></label>` : ""}
-    </section>`;
-}
 function selectionBar(){
   const {cells, ok} = currentSelection(), fee = calcFee(S.cat, cells, S.days);
-  return `<div class="selbar"><div><small>${ok ? esc(summaryText(S.cat, cells, S.days)) : (S.cat === "K" ? "この日は貸切できません" : "枠を選んでください")}</small><b>${ok ? yen(fee.total) : "—"}</b></div>
-    <button class="btn" ${ok ? "" : "disabled"} onclick="go('form')">申込へ進む</button></div>`;
+  const blocked = !S.adminEntry && S.me && S.me.status === "rejected";
+  return `<div class="selbar"><div><small>${ok ? esc(summaryText(S.cat, cells, S.days)) : "枠を選んでください"}</small><b>${ok ? yen(fee.total) : "—"}</b></div>
+    <button class="btn" ${ok && !blocked ? "" : "disabled"} onclick="go('form')">申込へ進む</button></div>`;
 }
 function setCat(k){
-  const prevK = S.cat === "K"; S.cat = k;
-  if (k === "K" || prevK) S.sel = new Set();
+  if (!allowedCats().includes(k)) return;
+  S.cat = k;
   if (k === "C" || k === "D") SLOTS.forEach(s => S.sel.delete(`ALL_${s.id}`));
-  if (k !== "K") { S.days = 1; S.stay = false; }
   render();
 }
 function pickDate(v){
@@ -570,34 +708,46 @@ function feeTable(fee, adj){
 function viewForm(){
   const {cells, ok} = currentSelection();
   if (!ok) { S.view = "board"; return viewBoard(); }
-  const fee = calcFee(S.cat, cells, S.days), f = S.form, v = k => esc(f[k] || "");
-  const needGroup = S.cat === "C" || S.cat === "D";
-  return `<section class="card"><button class="link" onclick="go('board')">‹ 枠を選び直す</button>
+  const fee = calcFee(S.cat, cells, S.days);
+  const head = `<section class="card"><button class="link" onclick="go('board')">‹ 枠を選び直す</button>
     <h2 style="margin-top:6px">申込内容</h2>
-    <dl class="kv"><dt>利用日</dt><dd>${fmtFull(S.date)}${S.cat === "K" && S.days === 2 ? `〜${fmtDate(addDays(S.date, 1))}` : ""}</dd>
+    <dl class="kv"><dt>利用日</dt><dd>${fmtFull(S.date)}</dd>
     <dt>利用区分</dt><dd>${CATS[S.cat].name}</dd>
-    <dt>部屋・時間</dt><dd>${esc(summaryText(S.cat, cells, S.days))}${S.cat === "K" && S.days === 2 && S.stay ? "（通夜宿泊あり）" : ""}</dd></dl>
-    ${feeTable(fee)}</section>
-    <section class="card"><h2>申込者</h2>
-    <div class="field"><label for="f_group">団体名${needGroup ? "<em>必須</em>" : "<em style='color:var(--sub)'>個人の場合は空欄</em>"}</label><input id="f_group" value="${v("group")}" autocomplete="organization"></div>
-    <div class="grid2">
-      <div class="field"><label for="f_name">代表者の氏名<em>必須</em></label><input id="f_name" value="${v("name")}" autocomplete="name"></div>
-      <div class="field"><label for="f_tel">電話番号<em>必須</em></label><input id="f_tel" type="tel" value="${v("tel")}" autocomplete="tel" inputmode="tel"></div>
-    </div>
-    <div class="field"><label for="f_email">メールアドレス</label><input id="f_email" type="email" value="${v("email")}" autocomplete="email"></div>
+    <dt>部屋・時間</dt><dd>${esc(summaryText(S.cat, cells, 1))}</dd></dl>
+    ${feeTable(fee)}</section>`;
+  if (!S.adminEntry && !S.user) return head + `<section class="card"><h2>ログインしてください</h2>
+    <p style="margin-top:0">申込にはログインが必要です。Google アカウントか、メールアドレスとパスワードでログインできます。選んだ枠はそのまま残ります。</p>
+    <button class="btn" onclick="signIn()">ログイン・アカウント作成</button></section>`;
+  const me = S.me, active = !S.adminEntry && isActiveUser();
+  if (!S.adminEntry && me && me.status === "rejected") return head + `<section class="card"><p style="margin:0">利用者登録が承認されていないため、Webからは申し込めません。${esc(HALL.contact)}。</p></section>`;
+  const base = S.adminEntry || active ? {} : {group:me?.group, name:me?.name || S.user?.displayName, tel:me?.tel, email:me?.email || S.user?.email};
+  const f = {...base, ...S.form}, v = k => esc(f[k] || "");
+  const needGroup = S.cat === "C" || S.cat === "D";
+  const profile = active
+    ? `<section class="card"><h2>利用者</h2><dl class="kv"><dt>団体名</dt><dd>${esc(me.group || "（個人）")}</dd><dt>代表者</dt><dd>${esc(me.name)}</dd><dt>電話</dt><dd>${esc(me.tel)}</dd>${me.email ? `<dt>メール</dt><dd>${esc(me.email)}</dd>` : ""}</dl>
+       <p class="hint" style="margin:0">登録内容の変更は管理人へご連絡ください。</p></section>`
+    : `<section class="card"><h2>${S.adminEntry ? "申込者" : "利用者登録の内容"}</h2>
+       ${S.adminEntry ? "" : `<p class="hint" style="margin-top:0">この内容で利用者登録を申請します。管理人が承認すると登録完了となり、次からは入力なしで申し込めて、すぐに予約確定になります。</p>`}
+       <div class="field"><label for="f_group">団体名${needGroup ? "<em>必須</em>" : "<em style='color:var(--sub)'>個人の場合は空欄</em>"}</label><input id="f_group" value="${v("group")}" autocomplete="organization"></div>
+       <div class="grid2">
+         <div class="field"><label for="f_name">代表者の氏名<em>必須</em></label><input id="f_name" value="${v("name")}" autocomplete="name"></div>
+         <div class="field"><label for="f_tel">電話番号<em>必須</em></label><input id="f_tel" type="tel" value="${v("tel")}" autocomplete="tel" inputmode="tel"></div>
+       </div>
+       <div class="field"><label for="f_email">メールアドレス</label><input id="f_email" type="email" value="${v("email")}" autocomplete="email"></div></section>`;
+  return head + profile + `<section class="card"><h2>利用内容</h2>
     <div class="grid2">
       <div class="field"><label for="f_purpose">利用目的<em>必須</em></label><input id="f_purpose" value="${v("purpose")}" placeholder="例 体操教室、定例会"></div>
       <div class="field"><label for="f_people">人数（予定）</label><input id="f_people" type="number" min="1" inputmode="numeric" value="${v("people")}"></div>
     </div>
     <div class="field"><label for="f_note">連絡事項</label><textarea id="f_note" placeholder="準備で早めに入りたい、備品を使いたい など">${v("note")}</textarea></div>
-    <label class="check"><input type="checkbox" id="f_agree"><span>使用後は清掃・片付けをし、管理人の確認を受けます。使用料は承認後にお支払いします。</span></label>
-    <button class="btn wide" onclick="submitRequest(this)">この内容で申し込む</button></section>`;
+    <label class="check"><input type="checkbox" id="f_agree"><span>使用後は清掃・片付けをし、管理人の確認を受けます。使用料は予約確定後にお支払いします。</span></label>
+    <button class="btn wide" onclick="submitRequest(this)">${S.adminEntry || active ? "この内容で申し込む" : "仮予約して利用者登録を申請する"}</button></section>`;
 }
 function buildUpdate(id, req){
   const up = {};
   up[`requests/${id}`] = req;
   up[`status/${req.no}`] = clean({status:req.status, date:req.date, date2:req.date2 || null, summary:summaryText(req.cat, req.cells, req.days || 1), fee:effFee(req), createdAt:req.createdAt});
-  reqDates(req).forEach(d => req.cells.forEach(c => up[`slots/${d}/${c}`] = {no:req.no, id, status:req.status === "applied" ? "hold" : "fixed"}));
+  reqDates(req).forEach(d => req.cells.forEach(c => up[`slots/${d}/${c}`] = {no:req.no, id, status:isTent(req) ? "hold" : "fixed"}));
   return up;
 }
 const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -610,51 +760,57 @@ async function genNo(){
   throw new Error("no");
 }
 async function submitRequest(btn){
-  const g = id => document.getElementById(id).value.trim();
-  const f = {group:g("f_group"), name:g("f_name"), tel:g("f_tel"), email:g("f_email"), purpose:g("f_purpose"), people:g("f_people"), note:g("f_note")};
-  S.form = f;
+  const g = id => { const e = document.getElementById(id); return e ? e.value.trim() : ""; };
+  const me = S.me, active = !S.adminEntry && isActiveUser();
+  const f = active ? {group:me.group || "", name:me.name, tel:me.tel, email:me.email || ""} : {group:g("f_group"), name:g("f_name"), tel:g("f_tel"), email:g("f_email")};
+  Object.assign(f, {purpose:g("f_purpose"), people:g("f_people"), note:g("f_note")});
+  S.form = active ? {purpose:f.purpose, people:f.people, note:f.note} : f;
   const miss = [];
-  if ((S.cat === "C" || S.cat === "D") && !f.group) miss.push("団体名");
+  if (!active && (S.cat === "C" || S.cat === "D") && !f.group) miss.push("団体名");
   if (!f.name) miss.push("代表者の氏名"); if (!f.tel) miss.push("電話番号"); if (!f.purpose) miss.push("利用目的");
   if (miss.length) return toast(`${miss.join("・")}を入力してください`);
   if (!$("#f_agree").checked) return toast("使用後の片付けについての確認にチェックを入れてください");
+  if (!S.adminEntry && !S.user) return signIn();
   const {cells, ok} = currentSelection(); if (!ok) return go("board");
   btn.disabled = true; btn.textContent = "送信しています…";
   try {
-    await ensureAuth();
-    const dates = [S.date]; if (S.cat === "K" && S.days === 2) dates.push(addDays(S.date, 1));
+    const dates = [S.date];
     for (const d of dates) {
       S.slots[d] = (await store.get(`slots/${d}`)) || {};
       for (const c of cells) { const [r, s] = c.split("_"); if (cellState(d, r, s) !== "free") throw new Error("taken"); }
     }
+    const status = S.adminEntry || active ? "approved" : "tentative", now = Date.now();
     const id = genId(), no = await genNo(), fee = calcFee(S.cat, cells, S.days);
-    const req = clean({no, createdAt:Date.now(), source:S.adminEntry ? "窓口" : "Web", cat:S.cat, date:S.date, date2:dates[1] || null,
-      cells, days:S.cat === "K" ? S.days : 1, stay:S.cat === "K" && S.days === 2 && !!S.stay, fee, ...f, status:"applied"});
-    await store.update(buildUpdate(id, req));
-    S.lastReq = req; S.sel = new Set(); S.form = {}; S.days = 1; S.stay = false;
+    const req = clean({no, createdAt:now, source:S.adminEntry ? "窓口" : "Web", uid:S.adminEntry ? null : S.user.uid,
+      cat:S.cat, date:S.date, date2:dates[1] || null, cells, days:1,
+      fee, ...f, status, approvedAt:status === "approved" ? now : null});
+    const up = buildUpdate(id, req);
+    if (status === "tentative") up[`users/${S.user.uid}`] = clean({group:f.group, name:f.name, tel:f.tel, email:f.email, cat:S.cat, status:"pending", createdAt:me?.createdAt || now, updatedAt:now});
+    await store.update(up);
+    S.lastReq = req; S.sel = new Set(); S.form = {};
     go("done");
   } catch(e) {
     console.warn(e);
-    btn.disabled = false; btn.textContent = "この内容で申し込む";
-    if (e.message === "taken" || e.code === "PERMISSION_DENIED" || /permission/i.test(e.message)) {
-      toast("選んだ枠がちょうど埋まりました。空き状況を見て選び直してください"); S.sel = new Set(); go("board");
-    } else toast("送信できませんでした。通信状態を確認してもう一度お試しください");
+    btn.disabled = false; btn.textContent = "もう一度送信する";
+    if (e.message === "taken") { toast("選んだ枠がちょうど埋まりました。空き状況を見て選び直してください"); S.sel = new Set(); go("board"); }
+    else if (e.code === "PERMISSION_DENIED" || /permission/i.test(e.message)) toast("保存が許可されませんでした。枠が埋まったか、登録の状態が変わった可能性があります。画面を更新してください");
+    else toast("送信できませんでした。通信状態を確認してもう一度お試しください");
   }
 }
 function viewDone(){
   const r = S.lastReq; if (!r) { S.view = "board"; return viewBoard(); }
-  return `<section class="card"><h2>申込を受け付けました</h2>
-    <p>管理人が内容を確認し、承認します。承認後に使用料をお支払いください。</p>
-    <div class="receipt-no"><small>受付番号</small><b>${r.no}</b><small>申込状況の確認に使います。控えておいてください。</small></div>
+  const tent = isTent(r);
+  return `<section class="card"><h2>${tent ? "仮予約を受け付けました" : "予約が確定しました"}</h2>
+    <p>${tent ? "利用者登録の申請も一緒に送りました。管理人が登録を承認すると、この予約は確定になります。確定後に使用料をお支払いください。" : "使用料を管理人へお支払いください。"}</p>
+    <div class="receipt-no"><small>受付番号</small><b>${r.no}</b><small>マイページでいつでも確認できます。</small></div>
     <dl class="kv"><dt>利用日</dt><dd>${fmtFull(r.date)}${r.date2 ? `〜${fmtDate(r.date2)}` : ""}</dd><dt>部屋・時間</dt><dd>${esc(summaryText(r.cat, r.cells, r.days))}</dd><dt>使用料</dt><dd>${yen(r.fee.total)}</dd></dl>
-    <div class="btns"><button class="btn" onclick="S.lookupNo='${r.no}';S.lookupRes='';go('lookup')">申込状況を見る</button>
-    <button class="btn ghost" onclick="go('board')">続けて申し込む</button>
-    ${S.adminEntry ? `<button class="btn ghost" onclick="endAdminEntry()">管理画面に戻る</button>` : ""}</div></section>`;
+    <div class="btns">${S.adminEntry ? `<button class="btn" onclick="endAdminEntry()">管理画面に戻る</button><button class="btn ghost" onclick="go('board')">続けて登録する</button>`
+      : `<button class="btn" onclick="go('my')">マイページを見る</button><button class="btn ghost" onclick="go('board')">続けて申し込む</button>`}</div></section>`;
 }
 
-/* ===== 申込の確認 ===== */
-function viewLookup(){
-  return `<section class="card"><h2>申込状況の確認</h2><p style="margin-top:0">申込のときに表示された受付番号を入力してください。</p>
+/* ===== マイページ ===== */
+function lookupCard(){
+  return `<section class="card"><h2>受付番号で確認</h2>
     <div class="row"><input id="lk" value="${esc(S.lookupNo || "")}" placeholder="例 260926-K4TQ" autocapitalize="characters" aria-label="受付番号"
       onkeydown="if(event.key==='Enter')doLookup()"><button class="btn" onclick="doLookup()">確認する</button></div>
     <div id="lkres">${S.lookupRes || ""}</div></section>`;
@@ -664,12 +820,38 @@ async function doLookup(){
   if (!no) return toast("受付番号を入力してください");
   let r = null; try { r = await store.get(`status/${no}`); } catch(e) {}
   if (!r) { S.lookupRes = `<p class="note" style="margin-top:12px">「${esc(no)}」の申込は見つかりません。番号を確かめてもう一度入力してください。</p>`; return render(); }
-  const order = ["applied","approved","paid","done"], idx = order.indexOf(r.status);
-  S.lookupRes = `<div class="infobox"><p style="margin:0 0 6px"><span class="pill ${ST[r.status].cls}">${ST[r.status].pub}</span></p>
-    ${idx >= 0 ? `<ol class="steps">${["申込","承認","お支払い","利用完了"].map((n, i) => `<li class="${i <= idx ? "on" : ""}">${n}</li>`).join("")}</ol>` : ""}
+  S.lookupRes = `<div class="infobox">${statusBlock(r.status)}
     <dl class="kv"><dt>利用日</dt><dd>${fmtFull(r.date)}${r.date2 ? `〜${fmtDate(r.date2)}` : ""}</dd><dt>部屋・時間</dt><dd>${esc(r.summary)}</dd><dt>使用料</dt><dd>${yen(r.fee)}</dd></dl>
-    <p class="hint">${r.status === "approved" ? "使用料を管理人へお支払いください。" : ""}取消・変更は${esc(HALL.contact)}。</p></div>`;
+    <p class="hint">取消・変更は${esc(HALL.contact)}。</p></div>`;
   render();
+}
+function statusBlock(st){
+  const order = ["tentative","approved","paid","done"], idx = order.indexOf(st === "applied" ? "tentative" : st);
+  return `<p style="margin:0 0 6px"><span class="pill ${ST[st].cls}">${ST[st].pub}</span></p>
+    ${idx >= 0 ? `<ol class="steps">${["仮予約","予約確定","お支払い","利用完了"].map((n, i) => `<li class="${i <= idx ? "on" : ""}">${n}</li>`).join("")}</ol>` : ""}`;
+}
+function viewMy(){
+  if (!S.user) return `<section class="card"><h2>マイページ</h2><p style="margin-top:0">ログインすると、利用者登録の状況と自分の申込を確認できます。</p>
+    <button class="btn" onclick="signIn()">ログイン・アカウント作成</button></section>` + lookupCard();
+  const me = S.me;
+  let h = `<section class="card"><div class="datehead"><h2 style="margin:0">利用者登録</h2>${me ? `<span class="pill ${USER_ST[me.status].cls}">${USER_ST[me.status].name}</span>` : `<span class="pill done">未登録</span>`}</div>`;
+  if (!me) h += `<p>まだ利用者登録はありません。はじめての申込の内容で登録を申請します。</p><button class="btn" onclick="go('board')">空き状況から申し込む</button>`;
+  else {
+    h += `<dl class="kv"><dt>団体名</dt><dd>${esc(me.group || "（個人）")}</dd><dt>代表者</dt><dd>${esc(me.name)}</dd><dt>電話</dt><dd>${esc(me.tel)}</dd>${me.email ? `<dt>メール</dt><dd>${esc(me.email)}</dd>` : ""}<dt>利用区分</dt><dd>${esc(CATS[me.cat]?.name || "")}${me.status === "pending" ? "（申請中）" : ""}</dd></dl>`;
+    h += `<p class="hint" style="margin:0">${me.status === "pending" ? "管理人が登録を確認しています。承認されるまで、申込は仮予約になります。" : me.status === "active" ? "申込はそのまま予約確定になります。登録内容の変更は管理人へご連絡ください。" : `登録が承認されませんでした。${esc(HALL.contact)}。`}</p>`;
+  }
+  if (!isVerified(S.user)) h += `<div class="note" style="margin:12px 0 0">メールアドレスの確認がまだです。届いたメールのリンクを開いてから「確認した」を押してください。<div class="btns"><button class="btn sm" onclick="reloadUser()">確認した</button><button class="btn sm ghost" onclick="resendVerify()">確認メールを再送</button></div></div>`;
+  h += `<p class="hint">${esc(S.user.email || S.user.displayName || "")} でログイン中　<button class="link" onclick="signOut()">ログアウト</button></p></section>`;
+  const list = Object.entries(S.myReqs || {}).map(([id, r]) => ({id, ...r})).sort((a, b) => b.date.localeCompare(a.date));
+  h += `<section class="card"><h2>自分の申込</h2>${list.length ? list.map(myCard).join("") : `<div class="empty">申込はまだありません。</div>`}
+    <p class="hint">取消・変更は${esc(HALL.contact)}。</p></section>`;
+  return h;
+}
+function myCard(r){
+  const d = parse(r.date);
+  return `<div class="req static"><div class="dt"><small>${d.getMonth()+1}月</small><b>${d.getDate()}</b><small>${WD[d.getDay()]}曜</small></div>
+    <div><div class="who">${esc(summaryText(r.cat, r.cells || [], r.days || 1))}</div><div class="what">受付番号 ${esc(r.no)}${r.date2 ? `・〜${fmtDate(r.date2)}` : ""}<br>${esc(r.purpose || "")}</div></div>
+    <div class="right"><span class="pill ${ST[r.status].cls}">${ST[r.status].adm}</span><b>${yen(effFee(r))}</b>${r.payment ? `<small>領収書 ${esc(r.payment.receiptNo)}</small>` : ""}</div></div>`;
 }
 
 /* ===== 料金表 ===== */
@@ -678,61 +860,88 @@ function viewFees(){
     <tbody>${ROOMS.filter(R => FEES[k][R.id]).map(R => { const f = FEES[k][R.id]; return `<tr><th>${R.name}</th>${SLOTS.map(() => `<td>${f[0].toLocaleString()}</td>`).join("")}<td>${f[1].toLocaleString()}</td></tr>`; }).join("")}</tbody></table></div>`;
   return `<section class="card"><h2>使用料金<small>単位：円／平成17年5月22日改訂</small></h2>
     ${["A","B","C","D"].map(k => `<div class="cat-title"><b>${k}</b><span class="maru">${CATS[k].name}</span></div>${tbl(k)}`).join("")}
-    <div class="cat-title"><b>冠</b><span class="maru">冠婚葬祭（会員利用に限定）</span></div>
-    <p style="margin:0">全館貸切、1日につき16,500円（室料15,000円＋空調料1,500円）。葬儀は通夜・告別式の2日間、通夜の宿泊ができます。その他の光熱費は使用料に含まれます。</p></section>
+    </section>
     <section class="card"><h2>利用時間</h2><dl class="kv">${SLOTS.map(s => `<dt>${s.name}</dt><dd>${s.time}</dd>`).join("")}</dl>
     <p class="hint" style="margin:0">同じ部屋を午前・午後・夜間すべて使う場合は全日料金です。</p></section>`;
 }
 
 /* ===== 管理 ===== */
 function setAdmin(flag){
-  S.isAdmin = flag;
-  if (flag && !unsubReq) unsubReq = store.on("requests", v => { S.requests = v || {}; if (S.view === "admin") render(); if (S.openId && $("#sheet").classList.contains("open") && !S.sheetMode) openDetail(S.openId); });
-  if (!flag && unsubReq) { unsubReq(); unsubReq = null; S.requests = {}; }
-  render();
+  if (flag && !adminUnsubs.length) {
+    adminUnsubs = [
+      store.on("requests", v => { S.requests = v || {}; refreshAdmin(); }),
+      store.on("users", v => { S.users = v || {}; refreshAdmin(); }),
+      store.on("adminRequests", v => { S.adminReqs = v || {}; refreshAdmin(); }),
+      store.on("roster", v => { S.roster = v || {}; refreshAdmin(); })
+    ];
+  }
+  if (!flag && adminUnsubs.length) { adminUnsubs.forEach(f => f()); adminUnsubs = []; S.requests = {}; S.users = {}; S.adminReqs = {}; S.roster = {}; }
+  const changed = S.isAdmin !== flag; S.isAdmin = flag;
+  if (changed) render();
 }
-function viewLogin(){
-  if (DEMO) return `<section class="card"><h2>管理者ログイン</h2><p style="margin-top:0">お試しモードです。PIN「${esc(HALL.demoPin)}」でログインできます。</p>
-    <div class="row"><input id="pin" type="password" inputmode="numeric" placeholder="PIN" aria-label="PIN" onkeydown="if(event.key==='Enter')demoLogin()"><button class="btn" onclick="demoLogin()">ログイン</button></div></section>`;
-  const u = S.user;
-  if (u && !u.isAnonymous) return `<section class="card"><h2>管理者として登録されていません</h2>
-    <p style="margin-top:0">${esc(u.email || "")} でログインしています。Firebase コンソールの Realtime Database で、次の場所に <b>true</b> を登録すると管理者になります。</p>
-    <pre class="rules">${ROOT}/admins/${esc(u.uid)} : true</pre>
-    <div class="btns"><button class="btn ghost" onclick="copyText('${esc(u.uid)}')">ユーザーIDをコピー</button><button class="btn" onclick="recheckAdmin()">登録したので再確認</button><button class="btn ghost" onclick="logout()">ログアウト</button></div></section>`;
-  return `<section class="card"><h2>管理者ログイン</h2><p style="margin-top:0">管理人・担当者は Google アカウントでログインしてください。</p>
-    <button class="btn" onclick="googleLogin()">Google でログイン</button></section>`;
+function refreshAdmin(){
+  if (S.view === "admin") render();
+  if ($("#sheet").classList.contains("open") && !S.sheetMode) { if (S.openId) openDetail(S.openId); else if (S.openUid) openUser(S.openUid); }
 }
-function demoLogin(){ if ($("#pin").value === HALL.demoPin) setAdmin(true); else toast("PINが違います"); }
-async function googleLogin(){
-  try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
-  catch(e) { if (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment") await auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider()); else toast("ログインできませんでした：" + e.code); }
+function viewAdminGate(){
+  const demoBox = DEMO ? `<div class="infobox"><h3>お試しモード</h3><p style="margin-top:0">PIN「${esc(HALL.demoPin)}」で管理者として入れます。</p>
+    <div class="row"><input id="pin" type="password" inputmode="numeric" placeholder="PIN" aria-label="PIN" onkeydown="if(event.key==='Enter')demoAdminPin('pin')"><button class="btn" onclick="demoAdminPin('pin')">管理者で入る</button></div></div>` : "";
+  if (!S.user) return `<section class="card"><h2>管理者ログイン</h2><p style="margin-top:0">管理人・担当者は Google アカウントかメールアドレスでログインしてください。はじめての方は、ログイン後に管理者として申請できます。</p>
+    <button class="btn" onclick="signIn()">ログイン・アカウント作成</button>${demoBox}</section>`;
+  const r = S.myAdminReq;
+  if (r && r.status === "pending") return `<section class="card"><h2>管理者申請を送信済みです</h2>
+    <p style="margin-top:0">ほかの管理者が承認すると、この画面が管理画面に切り替わります。</p>
+    <dl class="kv"><dt>氏名</dt><dd>${esc(r.name)}</dd><dt>役割</dt><dd>${esc(r.role || "")}</dd><dt>申請日時</dt><dd>${fmtTs(r.at)}</dd></dl>
+    <button class="link" onclick="signOut()">ログアウト</button>${demoBox}</section>`;
+  return `<section class="card"><h2>管理者として申請する</h2>
+    ${r && r.status === "rejected" ? `<p class="note ng">前回の申請は承認されませんでした。内容を確かめて申請し直せます。</p>` : ""}
+    ${r && r.status === "removed" ? `<p class="note">管理者から外れています。必要なら申請し直してください。</p>` : ""}
+    <p style="margin-top:0">${esc(S.user.email || "")} でログインしています。ほかの管理者が承認すると管理画面を使えるようになります（まだ管理者が一人もいない場合は、最初の管理者としてすぐ登録されます）。</p>
+    <div class="grid2"><div class="field"><label for="ad_name">氏名<em>必須</em></label><input id="ad_name" value="${esc(r?.name || S.me?.name || S.user.displayName || "")}"></div>
+    <div class="field"><label for="ad_role">役割</label><input id="ad_role" value="${esc(r?.role || "")}" placeholder="例 管理人、会計、自治会役員"></div></div>
+    <div class="field"><label for="ad_memo">ひとこと</label><input id="ad_memo" placeholder="例 土日の鍵の受け渡しを担当"></div>
+    <div class="btns"><button class="btn" onclick="applyAdmin(this)">管理者として申請する</button><button class="btn ghost" onclick="signOut()">ログアウト</button></div>${demoBox}</section>`;
 }
-async function recheckAdmin(){ const u = auth.currentUser; if (!u) return; const ok = await store.get(`admins/${u.uid}`).catch(() => null); setAdmin(!!ok); if (!ok) toast("まだ登録されていません"); }
-async function logout(){ closeSheet(); if (DEMO) return setAdmin(false); await auth.signOut(); setAdmin(false); }
+async function applyAdmin(btn){
+  const u = S.user, name = $("#ad_name").value.trim(); if (!name) return toast("氏名を入力してください");
+  const req = {name, role:$("#ad_role").value.trim(), memo:$("#ad_memo").value.trim(), email:u.email || "", status:"pending", at:Date.now()};
+  btn.disabled = true;
+  try {
+    let boot = false;
+    if (DEMO) boot = !dget("admins") || !Object.keys(dget("admins")).length;
+    else { try { await store.update({[`admins/${u.uid}`]:true}); boot = true; } catch(e) { boot = false; } }
+    if (boot) { await store.update({[`admins/${u.uid}`]:true, [`adminRequests/${u.uid}`]:{...req, status:"approved", approvedAt:Date.now()}}); toast("最初の管理者として登録しました"); }
+    else { await store.update({[`adminRequests/${u.uid}`]:req}); toast("管理者申請を送りました"); }
+  } catch(e) { console.warn(e); btn.disabled = false; toast("送信できませんでした：" + (e.code || e.message)); }
+}
+function startAdminEntry(){ S.adminEntry = true; S.sel = new Set(); S.form = {}; applyMeToSelection(); go("board"); }
+function endAdminEntry(){ S.adminEntry = false; S.form = {}; applyMeToSelection(); S.adminTab = "list"; go("admin"); }
 function copyText(t){ navigator.clipboard?.writeText(t).then(() => toast("コピーしました")); }
-function startAdminEntry(){ S.adminEntry = true; S.sel = new Set(); S.form = {}; go("board"); }
-function endAdminEntry(){ S.adminEntry = false; S.adminTab = "list"; go("admin"); }
 
-function viewAdmin(){
-  if (!S.isAdmin) return viewLogin();
-  const tabs = [["list","受付"],["cal","カレンダー"],["sum","集計"],["set","設定"]];
-  const body = S.adminTab === "cal" ? adminCal() : S.adminTab === "sum" ? adminSum() : S.adminTab === "set" ? adminSet() : adminList();
-  return `<div class="subtabs">${tabs.map(([k, n]) => `<button class="${S.adminTab === k ? "on" : ""}" onclick="S.adminTab='${k}';render()">${n}</button>`).join("")}</div>${body}`;
-}
 const reqList = () => Object.entries(S.requests || {}).map(([id, r]) => ({id, ...r}));
 const active = r => !["rejected","cancelled"].includes(r.status);
+const pendingCount = () => Object.values(S.users || {}).filter(u => u.status === "pending").length + Object.values(S.adminReqs || {}).filter(a => a.status === "pending").length;
+function viewAdmin(){
+  if (!S.isAdmin) return viewAdminGate();
+  const pc = pendingCount();
+  const tabs = [["list","受付"],["apps",`申請${pc ? `<i class="cnt">${pc}</i>` : ""}`],["cal","カレンダー"],["sum","集計"],["set","設定"]];
+  const body = S.adminTab === "apps" ? adminApps() : S.adminTab === "cal" ? adminCal() : S.adminTab === "sum" ? adminSum() : S.adminTab === "set" ? adminSet() : adminList();
+  return `<div class="subtabs">${tabs.map(([k, n]) => `<button class="${S.adminTab === k ? "on" : ""}" onclick="S.adminTab='${k}';render()">${n}</button>`).join("")}</div>${body}`;
+}
 function matchFilter(r, f){
   const t = today();
   if (f === "today") return reqDates(r).includes(t) && ["approved","paid","done"].includes(r.status);
+  if (f === "tentative") return isTent(r);
   if (f === "closed") return !active(r);
   if (f === "all") return true;
   return r.status === f;
 }
 function reqCard(r){
   const d = parse(r.date), t = today(), flags = [];
+  const u = r.uid ? S.users[r.uid] : null;
+  if (isTent(r) && u && u.status === "pending") flags.push("登録審査中");
   if (r.status === "approved" && r.date <= t) flags.push("未収");
   if (r.status === "paid" && lastDate(r) <= t) flags.push("チェック待ち");
-  if (r.status === "applied") flags.push(`${fmtTs(r.createdAt)}受付`);
   if (r.check && r.check.damage === "あり") flags.push("破損あり");
   return `<button class="req" onclick="openDetail('${r.id}')">
     <div class="dt"><small>${d.getMonth()+1}月</small><b>${d.getDate()}</b><small>${WD[d.getDay()]}曜</small></div>
@@ -741,13 +950,40 @@ function reqCard(r){
 }
 function adminList(){
   const all = reqList();
-  const F = [["today","今日の利用"],["applied","新規申込"],["approved","承認済・未払"],["paid","支払済"],["done","完了"],["closed","取消・却下"],["all","すべて"]];
+  const F = [["today","今日の利用"],["tentative","仮予約"],["approved","確定・未払"],["paid","支払済"],["done","完了"],["closed","取消・却下"],["all","すべて"]];
   let list = all.filter(r => matchFilter(r, S.filter));
   const desc = ["done","closed","all"].includes(S.filter);
   list.sort((a, b) => (a.date + (a.createdAt || 0)).localeCompare(b.date + (b.createdAt || 0)) * (desc ? -1 : 1));
   return `<div class="btns" style="margin:0 0 12px"><button class="btn ghost sm" onclick="startAdminEntry()">＋ 窓口・電話の申込を登録</button></div>
     <div class="filters">${F.map(([k, n]) => `<button class="${S.filter === k ? "on" : ""}" onclick="S.filter='${k}';render()">${n}<i>${all.filter(r => matchFilter(r, k)).length}</i></button>`).join("")}</div>
-    ${list.length ? list.map(reqCard).join("") : `<div class="empty">${S.filter === "applied" ? "新しい申込はありません。" : "該当する申込はありません。"}</div>`}`;
+    ${list.length ? list.map(reqCard).join("") : `<div class="empty">該当する申込はありません。</div>`}`;
+}
+function userCard(u){
+  const tents = reqList().filter(r => r.uid === u.uid && isTent(r)).length;
+  return `<button class="req" onclick="openUser('${u.uid}')">
+    <div class="dt"><small>区分</small><b>${esc(u.cat)}</b><small>${fmtTs(u.createdAt).split(" ")[0]}</small></div>
+    <div><div class="who">${esc(u.group || u.name)}</div><div class="what">${u.group ? esc(u.name) + "・" : ""}${esc(u.tel)}<br>${esc(CATS[u.cat]?.name || "")}</div></div>
+    <div class="right"><span class="pill ${USER_ST[u.status].cls}">${USER_ST[u.status].name}</span>${tents ? `<span class="flag">仮予約${tents}件</span>` : ""}</div></button>`;
+}
+function adminApps(){
+  const us = Object.entries(S.users || {}).map(([uid, u]) => ({uid, ...u})).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const pend = us.filter(u => u.status === "pending"), act = us.filter(u => u.status === "active"), rej = us.filter(u => u.status === "rejected");
+  const ars = Object.entries(S.adminReqs || {}).map(([uid, a]) => ({uid, ...a}));
+  const apend = ars.filter(a => a.status === "pending"), aok = ars.filter(a => a.status === "approved");
+  return `<section class="card"><h2>利用者登録の申請<small>${pend.length}件</small></h2>
+      ${pend.length ? pend.map(userCard).join("") : `<div class="empty">審査待ちの申請はありません。</div>`}</section>
+    <section class="card"><h2>管理者の申請<small>${apend.length}件</small></h2>
+      ${apend.length ? apend.map(a => `<div class="req static" style="grid-template-columns:1fr auto"><div><div class="who">${esc(a.name)}</div>
+        <div class="what">${esc(a.role || "役割未記入")}・${esc(a.email || "")}${a.memo ? `<br>${esc(a.memo)}` : ""}<br>${fmtTs(a.at)} 申請</div></div>
+        <div class="btns" style="margin:0;flex-direction:column"><button class="btn sm appr" onclick="approveAdmin('${a.uid}')">承認</button><button class="btn sm ghost" onclick="rejectAdmin('${a.uid}')">断る</button></div></div>`).join("")
+        : `<div class="empty">審査待ちの申請はありません。</div>`}</section>
+    <section class="card"><h2>登録済みの利用者<small>${act.length}件</small></h2>
+      ${act.length ? act.map(userCard).join("") : `<div class="empty">まだいません。</div>`}
+      ${rej.length ? `<details class="more-box"><summary>登録を断った申請（${rej.length}件）</summary>${rej.map(userCard).join("")}</details>` : ""}</section>
+    ${rosterSection()}
+    <section class="card"><h2>管理者<small>${aok.length}人</small></h2>
+      <table class="list"><tbody>${aok.map(a => `<tr><td>${esc(a.name)}<br><small style="color:var(--sub)">${esc(a.role || "")} ${esc(a.email || "")}</small></td>
+        <td class="r">${a.uid === S.user.uid ? "（自分）" : `<button class="btn sm ghost" onclick="removeAdmin('${a.uid}')">外す</button>`}</td></tr>`).join("")}</tbody></table></section>`;
 }
 function monthNav(){
   const [y, m] = S.month.split("-").map(Number);
@@ -765,12 +1001,12 @@ function adminCal(){
       ${items.slice(0, 3).map(r => `<span class="ev ${ST[r.status].cls}">${esc(shortText(r))} ${esc(r.group || r.name)}</span>`).join("")}
       ${items.length > 3 ? `<span class="more">他${items.length - 3}件</span>` : ""}</button>`;
   }
-  return h + `</div><p class="hint">日付を押すと、その日の部屋ごとの利用者が見られます。色は状態（黄：新規、青：未払、緑：支払済、灰：完了）です。</p></section>`;
+  return h + `</div><p class="hint">日付を押すと、その日の部屋ごとの利用者が見られます。色は状態（黄：仮予約、青：確定・未払、緑：支払済、灰：完了）です。</p></section>`;
 }
 function openDay(ds){
   const items = reqList().filter(r => active(r) && reqDates(r).includes(ds));
   const who = (room, slot) => items.filter(r => (r.cells || []).includes(`${room}_${slot}`)).map(r => `<span class="ev ${ST[r.status].cls}" style="font-size:.75rem;height:auto">${esc(r.group || r.name)}</span>`).join("");
-  S.openId = null; S.sheetMode = null;
+  S.openId = null; S.openUid = null; S.sheetMode = null;
   showSheet(`<div class="sheet-head"><div><h2>${fmtFull(ds)}</h2><small>${items.length}件の利用</small></div><button class="x" onclick="closeSheet()" aria-label="閉じる">×</button></div>
     <div class="scroll"><table class="daytable"><thead><tr><th></th>${SLOTS.map(s => `<th>${s.name}</th>`).join("")}</tr></thead>
     <tbody>${ROOMS.map(R => `<tr><th>${R.name}</th>${SLOTS.map(s => `<td>${who(R.id, s.id)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
@@ -779,7 +1015,7 @@ function openDay(ds){
 function adminSum(){
   const mo = S.month, list = reqList().filter(r => r.date.startsWith(mo)), act = list.filter(active), t = today();
   const sum = a => a.reduce((s, r) => s + effFee(r), 0);
-  const paidList = act.filter(r => r.payment), unpaid = act.filter(r => r.status === "approved" || r.status === "applied");
+  const paidList = act.filter(r => r.payment), unpaid = act.filter(r => r.status === "approved" || isTent(r));
   const overdue = act.filter(r => r.status === "approved" && r.date <= t), waitCheck = act.filter(r => r.status === "paid" && lastDate(r) <= t);
   const byCat = Object.keys(CATS).map(k => { const a = act.filter(r => r.cat === k); return {k, n:a.length, amt:sum(a)}; }).filter(x => x.n);
   const koma = {}; ROOMS.forEach(R => koma[R.id] = 0);
@@ -788,70 +1024,173 @@ function adminSum(){
     <dl class="stat"><dt>利用件数（取消・却下を除く）</dt><dd>${act.length}件</dd>
     <dt>使用料の合計</dt><dd>${yen(sum(act))}</dd>
     <dt>入金済み</dt><dd>${yen(paidList.reduce((s, r) => s + Number(r.payment.amount || 0), 0))}（${paidList.length}件）</dd>
-    <dt>未入金（承認前を含む）</dt><dd class="${unpaid.length ? "warn" : ""}">${yen(sum(unpaid))}（${unpaid.length}件）</dd>
+    <dt>未入金（仮予約を含む）</dt><dd class="${unpaid.length ? "warn" : ""}">${yen(sum(unpaid))}（${unpaid.length}件）</dd>
     <dt>利用日を過ぎた未収</dt><dd class="${overdue.length ? "warn" : ""}">${overdue.length}件</dd>
     <dt>使用後チェック待ち</dt><dd class="${waitCheck.length ? "warn" : ""}">${waitCheck.length}件</dd></dl></section>
     ${overdue.length || waitCheck.length ? `<section class="card"><h2>対応が必要な申込</h2>${[...overdue, ...waitCheck].map(reqCard).join("")}</section>` : ""}
     <section class="card"><h2>利用区分別</h2>${byCat.length ? `<table class="list"><thead><tr><th>区分</th><th class="r">件数</th><th class="r">使用料</th></tr></thead><tbody>
-      ${byCat.map(x => `<tr><td>${x.k === "K" ? "冠婚葬祭" : x.k + " " + CATS[x.k].name}</td><td class="r">${x.n}</td><td class="r">${yen(x.amt)}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">この月の利用はまだありません。</div>`}</section>
+      ${byCat.map(x => `<tr><td>${x.k} ${CATS[x.k].name}</td><td class="r">${x.n}</td><td class="r">${yen(x.amt)}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">この月の利用はまだありません。</div>`}</section>
     <section class="card"><h2>部屋別の利用コマ数</h2><table class="list"><tbody>${ROOMS.map(R => `<tr><td>${R.name}</td><td class="r">${koma[R.id]}コマ</td></tr>`).join("")}</tbody></table>
     <p class="hint">午前・午後・夜間をそれぞれ1コマとして数えています。</p>
     <div class="btns"><button class="btn ghost" onclick="exportCSV(false)">この月をCSVで出力</button></div></section>`;
 }
-const RULES = `{
-  "rules": {
-    "${ROOT}": {
-      "admins": {
-        "$uid": { ".read": "auth != null && auth.uid === $uid" }
-      },
-      "requests": {
-        ".read": "auth != null && root.child('${ROOT}/admins/' + auth.uid).exists()",
-        "$id": {
-          ".write": "auth != null && (root.child('${ROOT}/admins/' + auth.uid).exists() || (!data.exists() && newData.child('status').val() === 'applied'))"
-        }
-      },
-      "slots": {
-        ".read": true,
-        "$date": { "$key": {
-          ".write": "auth != null && (root.child('${ROOT}/admins/' + auth.uid).exists() || (!data.exists() && newData.child('status').val() === 'hold'))"
-        } }
-      },
-      "status": {
-        "$no": {
-          ".read": true,
-          ".write": "auth != null && (root.child('${ROOT}/admins/' + auth.uid).exists() || (!data.exists() && newData.child('status').val() === 'applied'))"
-        }
+const A_ = `root.child('${ROOT}/admins/' + auth.uid).val() === true`;
+const ACT_ = `root.child('${ROOT}/users/' + auth.uid + '/status').val() === 'active'`;
+const RULES = `"${ROOT}": {
+  "admins": {
+    ".read": "auth != null && ${A_}",
+    "$uid": {
+      ".read": "auth != null && auth.uid === $uid",
+      ".write": "auth != null && (${A_} || (auth.uid === $uid && !root.child('${ROOT}/admins').exists() && newData.val() === true))"
+    }
+  },
+  "adminRequests": {
+    ".read": "auth != null && ${A_}",
+    "$uid": {
+      ".read": "auth != null && auth.uid === $uid",
+      ".write": "auth != null && (${A_} || (auth.uid === $uid && newData.child('status').val() === 'pending' && data.child('status').val() !== 'approved'))"
+    }
+  },
+  "users": {
+    ".read": "auth != null && ${A_}",
+    "$uid": {
+      ".read": "auth != null && auth.uid === $uid",
+      ".write": "auth != null && (${A_} || (auth.uid === $uid && ((newData.child('status').val() === 'pending' && (!data.exists() || data.child('status').val() === 'pending')) || (!data.exists() && newData.child('status').val() === 'active' && auth.token.email_verified === true && newData.child('cat').val() === root.child('${ROOT}/rosterByEmail/' + auth.token.email.toLowerCase().replace('.', ',') + '/cat').val()))))"
+    }
+  },
+  "roster": {
+    ".read": "auth != null && ${A_}",
+    ".write": "auth != null && ${A_}"
+  },
+  "rosterByEmail": {
+    ".read": "auth != null && ${A_}",
+    ".write": "auth != null && ${A_}",
+    "$key": {
+      ".read": "auth != null && auth.token.email_verified === true && auth.token.email.toLowerCase().replace('.', ',') === $key"
+    }
+  },
+  "requests": {
+    ".read": "auth != null && (${A_} || (query.orderByChild === 'uid' && query.equalTo === auth.uid))",
+    ".indexOn": ["uid"],
+    "$id": {
+      ".read": "auth != null && data.child('uid').val() === auth.uid",
+      ".write": "auth != null && (${A_} || (!data.exists() && newData.child('uid').val() === auth.uid && ((newData.child('status').val() === 'tentative' && newData.parent().parent().child('users/' + auth.uid + '/status').val() === 'pending') || (newData.child('status').val() === 'approved' && ${ACT_} && newData.child('cat').val() === root.child('${ROOT}/users/' + auth.uid + '/cat').val()))))"
+    }
+  },
+  "slots": {
+    ".read": true,
+    "$date": {
+      "$key": {
+        ".write": "auth != null && (${A_} || (!data.exists() && ((newData.child('status').val() === 'hold' && newData.parent().parent().parent().child('users/' + auth.uid + '/status').val() === 'pending') || (newData.child('status').val() === 'fixed' && ${ACT_}))))"
       }
+    }
+  },
+  "status": {
+    "$no": {
+      ".read": true,
+      ".write": "auth != null && (${A_} || (!data.exists() && ((newData.child('status').val() === 'tentative' && newData.parent().parent().child('users/' + auth.uid + '/status').val() === 'pending') || (newData.child('status').val() === 'approved' && ${ACT_}))))"
     }
   }
 }`;
 function adminSet(){
-  return `<section class="card"><h2>データ</h2>
+  const [y, m] = S.month.split("-").map(Number);
+  return `<section class="card"><h2>CSV の書き出し・取り込み</h2>
+    <h3 class="sub">申込（予約）</h3>
+    <div class="btns" style="margin-top:0"><button class="btn ghost sm" onclick="exportCSV(false)">${y}年${m}月分を書き出す</button><button class="btn ghost sm" onclick="exportCSV(true)">全件を書き出す</button>
+      <button class="btn ghost sm" onclick="templateReq()">ひな形</button>
+      <label class="btn sm filebtn">CSVを取り込む<input type="file" accept=".csv,text/csv" onchange="importFile(this,'req')"></label></div>
+    <p class="hint">書き出したCSVと同じ見出しで取り込めます。必要な列は「利用日」「利用区分」「代表者（または団体名）」「部屋・時間帯」（例：ホールA 午前・午後／会議室 全日）です。取り込んだ申込は予約確定（状態が「支払済」「完了」ならその状態）になります。同じ受付番号の行と、予約済みの枠に重なる行は取り込みません。</p>
+    <h3 class="sub">利用者・名簿</h3>
+    <div class="btns" style="margin-top:0"><button class="btn ghost sm" onclick="exportUsers()">利用者と名簿を書き出す</button><button class="btn ghost sm" onclick="templateUsers()">ひな形</button>
+      <label class="btn sm filebtn">名簿CSVを取り込む<input type="file" accept=".csv,text/csv" onchange="importFile(this,'users')"></label></div>
+    <p class="hint">取り込んだ人は「名簿」に入ります。名簿のメールアドレスと同じアドレスでログインした人は（アドレスの確認が済んでいれば）自動で登録済みになります。電話番号やメールが名簿と一致する登録申請は、審査のときに名簿の区分が表示されます。Excel で保存した CSV（Shift_JIS）もそのまま読み込めます。</p></section>
+    <section class="card"><h2>データ</h2>
     <p style="margin-top:0">${DEMO ? "お試しモードで動いています。データはこの端末のブラウザにだけ保存されます。" : `Firebase に保存しています（${esc(S.user?.email || "")}）。`}</p>
-    <div class="btns"><button class="btn ghost" onclick="exportCSV(true)">全件をCSVで出力</button>
-    ${DEMO ? `<button class="btn ghost" onclick="addSamples()">サンプルの申込を入れる</button><button class="btn ghost" onclick="resetDemo()">お試しデータを消す</button>` : ""}
-    <button class="btn ghost" onclick="logout()">ログアウト</button></div></section>
+    <div class="btns">${DEMO ? `<button class="btn ghost" onclick="addSamples()">サンプルを入れる</button><button class="btn ghost" onclick="resetDemo()">お試しデータを消す</button>` : ""}
+    <button class="btn ghost" onclick="signOut()">ログアウト</button></div></section>
     <section class="card"><h2>Firebase の設定</h2>
-    <p style="margin-top:0">Authentication で「Google」と「匿名」を有効にし、Realtime Database のルールに次の内容を追加してください（既存アプリのルールがある場合は、"${ROOT}" の部分を同じ階層に並べます）。</p>
+    <p style="margin-top:0">Authentication で「Google」と「メール/パスワード」を有効にし、Realtime Database のルールの "rules" の中に次のブロックを並べてください。</p>
     <pre class="rules">${esc(RULES)}</pre>
     <div class="btns"><button class="btn ghost sm" onclick="copyText(RULES)">ルールをコピー</button></div>
-    <p class="hint">申込者は氏名・電話番号を含む申込本体（requests）を読めません。公開されるのは空き枠（slots）と、受付番号ごとの状況（status）だけです。</p></section>`;
+    <p class="hint">利用者は自分の登録内容と自分の申込しか読めません。誰でも見られるのは空き枠（slots）と受付番号ごとの状況（status）だけです。名簿は管理者しか読めません。</p></section>`;
 }
 
-/* ===== 詳細シート ===== */
-function showSheet(html){ const s = $("#sheet"); s.innerHTML = `<div class="scrim" onclick="closeSheet()"></div><div class="panel" role="dialog" aria-modal="true">${html}</div>`; s.classList.add("open"); document.body.style.overflow = "hidden"; }
-function closeSheet(){ const s = $("#sheet"); s.classList.remove("open"); s.innerHTML = ""; S.openId = null; S.sheetMode = null; document.body.style.overflow = ""; }
+/* ===== シート ===== */
+function showSheet(html){ const s = $("#sheet"); const top = s.querySelector(".panel")?.scrollTop || 0; s.innerHTML = `<div class="scrim" onclick="closeSheet()"></div><div class="panel" role="dialog" aria-modal="true">${html}</div>`; if (s.classList.contains("open")) s.querySelector(".panel").scrollTop = top; s.classList.add("open"); document.body.style.overflow = "hidden"; }
+function closeSheet(){ const s = $("#sheet"); s.classList.remove("open"); s.innerHTML = ""; S.openId = null; S.openUid = null; S.sheetMode = null; document.body.style.overflow = ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#sheet").classList.contains("open")) closeSheet(); });
-function setMode(m){ S.sheetMode = m; openDetail(S.openId); }
+function setMode(m){ S.sheetMode = m; if (S.openId) openDetail(S.openId); else if (S.openUid) openUser(S.openUid); }
+async function act(up, msg){
+  try { await store.update(up); toast(msg); S.sheetMode = null; if (S.openId) openDetail(S.openId); else if (S.openUid) openUser(S.openUid); render(); }
+  catch(e) { console.warn(e); toast("保存できませんでした：" + (e.code || e.message)); }
+}
 
+/* 利用者の審査 */
+function openUser(uid){
+  const u = S.users[uid]; if (!u) return closeSheet();
+  S.openUid = uid; S.openId = null;
+  const mine = reqList().filter(r => r.uid === uid).sort((a, b) => a.date.localeCompare(b.date));
+  const tents = mine.filter(isTent), m = S.sheetMode;
+  let h = `<div class="sheet-head"><div><span class="pill ${USER_ST[u.status].cls}">${USER_ST[u.status].name}</span><h2>${esc(u.group || u.name)}</h2>
+    <small>${fmtTs(u.createdAt)} 申請${u.approvedAt ? `／${fmtTs(u.approvedAt)} 承認` : ""}</small></div><button class="x" onclick="closeSheet()" aria-label="閉じる">×</button></div>
+    <dl class="kv"><dt>団体名</dt><dd>${esc(u.group || "（個人）")}</dd><dt>代表者</dt><dd>${esc(u.name)}</dd>
+    <dt>電話</dt><dd><a href="tel:${esc(u.tel)}">${esc(u.tel)}</a></dd>${u.email ? `<dt>メール</dt><dd><a href="mailto:${esc(u.email)}">${esc(u.email)}</a></dd>` : ""}
+    <dt>希望の区分</dt><dd>${esc(CATS[u.cat]?.name || "")}</dd>${u.rejectReason ? `<dt>断った理由</dt><dd>${esc(u.rejectReason)}</dd>` : ""}</dl>
+    ${rosterHint(u)}
+    <div class="field"><label for="u_cat">${u.status === "active" ? "登録区分" : "登録する区分"}</label><select id="u_cat">${["A","B","C","D"].map(k => `<option value="${k}" ${(u.status !== "active" && rosterMatch(u)[0] ? rosterMatch(u)[0].cat : u.cat) === k ? "selected" : ""}>${k} ${CATS[k].name}</option>`).join("")}</select></div>`;
+  if (m === "ureject") {
+    h += `<div class="sec"><h3>登録を断る理由</h3><div class="field"><input id="u_rs" placeholder="例 地域外のため、連絡がつかないため"></div>
+      <p class="hint" style="margin-top:0">断ると、この方の仮予約${tents.length}件も却下され、枠が空きに戻ります。</p>
+      <div class="btns"><button class="btn danger" onclick="rejectUser()">登録を断る</button><button class="btn ghost" onclick="setMode(null)">やめる</button></div></div>`;
+  } else if (u.status === "active") {
+    h += `<div class="btns"><button class="btn ghost" onclick="changeUserCat()">区分を変更する</button><button class="btn ghost" onclick="setMode('ureject')">登録を取り消す</button></div>`;
+    if (tents.length) h += `<div class="btns"><button class="btn appr" onclick="approveUser()">残っている仮予約を確定する</button></div>`;
+  } else {
+    h += `<p class="hint" style="margin-top:0">承認すると登録完了となり、この方の仮予約${tents.length}件が予約確定になります。区分を変えた場合は、仮予約の使用料も新しい区分で計算し直します。</p>
+      <div class="btns"><button class="btn appr" onclick="approveUser()">承認して登録する</button>${u.status === "pending" ? `<button class="btn ghost" onclick="setMode('ureject')">登録を断る</button>` : ""}</div>`;
+  }
+  h += `<div class="sec"><h3>この方の申込（${mine.length}件）</h3>${mine.map(reqCard).join("") || `<div class="empty">申込はありません。</div>`}</div>`;
+  showSheet(h);
+}
+function approveUser(){
+  const uid = S.openUid, cat = $("#u_cat").value, now = Date.now();
+  const up = {[`users/${uid}/status`]:"active", [`users/${uid}/cat`]:cat, [`users/${uid}/approvedAt`]:now, [`users/${uid}/rejectReason`]:null};
+  let changed = 0;
+  reqList().filter(r => r.uid === uid && isTent(r)).forEach(r => {
+    let fee = r.fee, rc = r.cat;
+    if (cat !== r.cat) {
+      const nf = calcFee(cat, r.cells || [], 1);
+      if (nf.lines.length === calcFee(r.cat, r.cells || [], 1).lines.length) { fee = nf; rc = cat; changed++; }
+    }
+    up[`requests/${r.id}/status`] = "approved"; up[`requests/${r.id}/approvedAt`] = now;
+    up[`requests/${r.id}/cat`] = rc; up[`requests/${r.id}/fee`] = fee;
+    up[`status/${r.no}/status`] = "approved"; up[`status/${r.no}/fee`] = r.feeAdj ? r.feeAdj.amount : fee.total;
+    slotPaths(r).forEach(p => up[`${p}/status`] = "fixed");
+  });
+  act(up, changed ? `登録しました（${changed}件の使用料を新しい区分で計算し直しました）` : "登録しました。仮予約は予約確定になりました");
+}
+function rejectUser(){
+  const uid = S.openUid, reason = $("#u_rs").value.trim(), now = Date.now();
+  const up = {[`users/${uid}/status`]:"rejected", [`users/${uid}/rejectReason`]:reason || null, [`users/${uid}/rejectedAt`]:now};
+  reqList().filter(r => r.uid === uid && isTent(r)).forEach(r => closeReqUpdate(up, r, "rejected", reason || "利用者登録が承認されなかったため"));
+  act(up, "登録を断りました");
+}
+function changeUserCat(){ const uid = S.openUid; act({[`users/${uid}/cat`]:$("#u_cat").value}, "区分を変更しました（これからの申込に使われます）"); }
+function approveAdmin(uid){ act({[`admins/${uid}`]:true, [`adminRequests/${uid}/status`]:"approved", [`adminRequests/${uid}/approvedAt`]:Date.now()}, "管理者として承認しました"); }
+function rejectAdmin(uid){ if (!confirm("この管理者申請を断りますか？")) return; act({[`adminRequests/${uid}/status`]:"rejected"}, "申請を断りました"); }
+function removeAdmin(uid){ if (!confirm("この方を管理者から外しますか？")) return; act({[`admins/${uid}`]:null, [`adminRequests/${uid}/status`]:"removed"}, "管理者から外しました"); }
+
+/* 申込の詳細 */
 function openDetail(id){
   const r = S.requests[id]; if (!r) return closeSheet();
-  S.openId = id; const m = S.sheetMode, t = today();
+  S.openId = id; S.openUid = null; const m = S.sheetMode, t = today();
+  const u = r.uid ? S.users[r.uid] : null;
   let h = `<div class="sheet-head"><div><span class="pill ${ST[r.status].cls}">${ST[r.status].adm}</span><h2>${esc(r.group || r.name)}</h2>
     <small>受付番号 ${r.no}／${esc(r.source || "Web")}受付 ${fmtTs(r.createdAt)}</small></div><button class="x" onclick="closeSheet()" aria-label="閉じる">×</button></div>
     <dl class="kv"><dt>利用日</dt><dd>${fmtFull(r.date)}${r.date2 ? `〜${fmtDate(r.date2)}` : ""}</dd>
-    <dt>部屋・時間</dt><dd>${esc(summaryText(r.cat, r.cells || [], r.days || 1))}${r.stay ? "（通夜宿泊あり）" : ""}</dd>
+    <dt>部屋・時間</dt><dd>${esc(summaryText(r.cat, r.cells || [], r.days || 1))}</dd>
     <dt>利用区分</dt><dd>${esc(CATS[r.cat].name)}</dd>
+    ${u ? `<dt>利用者登録</dt><dd><span class="pill ${USER_ST[u.status].cls}">${USER_ST[u.status].name}</span> <button class="link" onclick="openUser('${r.uid}')">登録内容を見る</button></dd>` : ""}
     <dt>代表者</dt><dd>${esc(r.name)}</dd>
     <dt>電話</dt><dd><a href="tel:${esc(r.tel)}">${esc(r.tel)}</a></dd>
     ${r.email ? `<dt>メール</dt><dd><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></dd>` : ""}
@@ -859,7 +1198,6 @@ function openDetail(id){
     ${r.note ? `<dt>連絡事項</dt><dd>${esc(r.note)}</dd>` : ""}</dl>
     ${feeTable(r.fee, r.feeAdj)}`;
 
-  // 操作
   if (m === "adj") {
     h += `<div class="sec"><h3>使用料の調整</h3><div class="grid2"><div class="field"><label for="a_amt">調整後の金額</label><input id="a_amt" type="number" inputmode="numeric" value="${effFee(r)}"></div>
       <div class="field"><label for="a_rs">理由</label><input id="a_rs" value="${esc(r.feeAdj?.reason || "")}" placeholder="例 減免、準備時間の延長"></div></div>
@@ -885,11 +1223,16 @@ function openDetail(id){
       <div class="btns"><button class="btn" onclick="saveCheck()">チェックを完了する</button><button class="btn ghost" onclick="setMode(null)">やめる</button></div></div>`;
   } else {
     const b = [];
-    if (r.status === "applied") b.push(`<button class="btn appr" onclick="approve()">承認する</button>`, `<button class="btn ghost" onclick="setMode('adj')">使用料を調整</button>`, `<button class="btn ghost" onclick="setMode('reject')">却下する</button>`);
+    if (isTent(r)) {
+      if (u && u.status === "pending") b.push(`<button class="btn appr" onclick="openUser('${r.uid}')">利用者登録を審査する</button>`);
+      else b.push(`<button class="btn appr" onclick="approve()">予約を確定する</button>`);
+      b.push(`<button class="btn ghost" onclick="setMode('adj')">使用料を調整</button>`, `<button class="btn ghost" onclick="setMode('reject')">この予約を却下</button>`);
+    }
     if (r.status === "approved") b.push(`<button class="btn" onclick="setMode('pay')">支払いを記録する</button>`, `<button class="btn ghost" onclick="setMode('adj')">使用料を調整</button>`, `<button class="btn ghost" onclick="setMode('cancel')">取り消す</button>`);
     if (r.status === "paid") b.push(`<button class="btn" onclick="setMode('check')">使用後チェック</button>`, `<button class="btn ghost" onclick="printReceipt()">領収書を印刷</button>`, `<button class="btn ghost" onclick="setMode('cancel')">取り消す</button>`);
     if (r.status === "done") b.push(`<button class="btn ghost" onclick="printReceipt()">領収書を印刷</button>`);
     if (b.length) h += `<div class="btns">${b.join("")}</div>`;
+    if (isTent(r) && u && u.status === "pending") h += `<p class="hint">利用者登録を承認すると、この仮予約は自動で予約確定になります。</p>`;
     if (r.status === "paid" && lastDate(r) > t) h += `<p class="hint">使用後チェックは利用が終わってから行います。</p>`;
   }
 
@@ -906,21 +1249,22 @@ function openDetail(id){
     <div class="btns"><button class="btn ghost sm" onclick="saveMemo()">メモを保存</button></div></div>`;
   showSheet(h);
 }
-async function act(up, msg){
-  try { await store.update(up); toast(msg); S.sheetMode = null; if (S.openId) openDetail(S.openId); render(); }
-  catch(e) { console.warn(e); toast("保存できませんでした：" + (e.code || e.message)); }
-}
 function approve(){
   const id = S.openId, r = S.requests[id], now = Date.now();
   const up = {[`requests/${id}/status`]:"approved", [`requests/${id}/approvedAt`]:now, [`status/${r.no}/status`]:"approved"};
   slotPaths(r).forEach(p => up[`${p}/status`] = "fixed");
-  act(up, "承認しました");
+  act(up, "予約を確定しました");
+}
+function closeReqUpdate(up, r, st, reason){
+  up[`requests/${r.id}/status`] = st;
+  up[`requests/${r.id}/${st === "rejected" ? "rejectReason" : "cancelReason"}`] = reason || null;
+  up[`requests/${r.id}/closedAt`] = Date.now();
+  up[`status/${r.no}/status`] = st;
+  slotPaths(r).forEach(p => { const [, d, k] = p.split("/"); const cur = S.slots[d]?.[k]; if (!cur || cur.id === r.id) up[p] = null; });
 }
 function closeReq(kind){
-  const id = S.openId, r = S.requests[id], reason = $("#x_rs").value.trim();
-  const up = {[`requests/${id}/status`]:kind === "reject" ? "rejected" : "cancelled", [`requests/${id}/${kind === "reject" ? "rejectReason" : "cancelReason"}`]:reason || null,
-    [`requests/${id}/closedAt`]:Date.now(), [`status/${r.no}/status`]:kind === "reject" ? "rejected" : "cancelled"};
-  slotPaths(r).forEach(p => { const cur = S.slots[p.split("/")[1]]?.[p.split("/")[2]]; if (!cur || cur.id === id) up[p] = null; });
+  const r = {id:S.openId, ...S.requests[S.openId]}, up = {};
+  closeReqUpdate(up, r, kind === "reject" ? "rejected" : "cancelled", $("#x_rs").value.trim());
   act(up, kind === "reject" ? "却下しました" : "取り消しました");
 }
 function saveAdj(){
@@ -960,31 +1304,276 @@ function printReceipt(){
     <p>上記の金額を正に領収いたしました。</p><div class="issuer">${esc(HALL.issuer)}<span class="stamp">印</span></div></div>`;
   window.print();
 }
-function exportCSV(all){
-  const list = reqList().filter(r => all || r.date.startsWith(S.month)).sort((a, b) => a.date.localeCompare(b.date));
-  const rows = [["受付番号","受付日時","受付方法","利用日","2日目","利用区分","団体名","代表者","電話","メール","利用目的","人数","部屋・時間帯","使用料","状態","支払方法","入金日","入金額","領収書番号","チェック日時","確認者","破損・汚損","管理メモ"]];
-  list.forEach(r => rows.push([r.no, fmtTs(r.createdAt), r.source, r.date, r.date2 || "", CATS[r.cat].name, r.group, r.name, r.tel, r.email, r.purpose, r.people,
-    summaryText(r.cat, r.cells || [], r.days || 1), effFee(r), ST[r.status].adm, r.payment?.method, r.payment?.paidAt, r.payment?.amount, r.payment?.receiptNo,
-    r.check ? fmtTs(r.check.at) : "", r.check?.checker, r.check ? r.check.damage + (r.check.damageNote ? "：" + r.check.damageNote : "") : "", r.adminMemo]));
+/* ===== CSV ===== */
+const REQ_HEAD = ["受付番号","受付日時","受付方法","利用日","利用区分","団体名","代表者","電話","メール","利用目的","人数","部屋・時間帯","使用料","状態","利用者登録","支払方法","入金日","入金額","領収書番号","チェック日時","確認者","破損・汚損","連絡事項","管理メモ"];
+const USER_HEAD = ["種別","状態","団体名","代表者","電話","メール","利用区分","申請日","承認日","備考"];
+function downloadCSV(name, rows){
   const csv = "\ufeff" + rows.map(row => row.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], {type:"text/csv"}));
-  a.download = `小川会館_申込_${all ? "全件" : S.month}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function parseCSV(text){
+  text = text.replace(/^\ufeff/, "");
+  const rows = []; let row = [], f = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i+1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === ",") { row.push(f); f = ""; }
+    else if (c === "\n" || c === "\r") { if (c === "\r" && text[i+1] === "\n") i++; row.push(f); rows.push(row); row = []; f = ""; }
+    else f += c;
+  }
+  if (f !== "" || row.length) { row.push(f); rows.push(row); }
+  return rows.filter(r => r.some(x => String(x).trim() !== ""));
+}
+async function readCSVFile(file){
+  const buf = await file.arrayBuffer(); let t;
+  try { t = new TextDecoder("utf-8", {fatal:true}).decode(buf); } catch(e) { t = new TextDecoder("shift_jis").decode(buf); }
+  return parseCSV(t);
+}
+const z2h = s => String(s || "").replace(/[０-９Ａ-Ｚａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/　/g, " ").trim();
+const digits = s => z2h(s).replace(/\D/g, "");
+const toNum = s => { const d = z2h(s).replace(/[¥￥,円\s]/g, ""); return d === "" || isNaN(Number(d)) ? null : Number(d); };
+function parseDateCSV(s){
+  const m = z2h(s).match(/(\d{4})\s*[-\/.年]\s*(\d{1,2})\s*[-\/.月]\s*(\d{1,2})/);
+  if (!m) return "";
+  const d = new Date(+m[1], +m[2]-1, +m[3]);
+  return d.getMonth() === +m[2]-1 ? ymd(d) : "";
+}
+function parseCat(s){
+  s = z2h(s); if (!s) return "";
+  const h = s.match(/^([A-Da-d])(\s|$)/); if (h) return h[1].toUpperCase();
+  for (const [k, c] of Object.entries(CATS)) if (s.includes(c.name) || c.name.includes(s)) return k;
+  if (/老人|婦人|子供|子ども/.test(s)) return "C";
+  if (/福祉|自治会/.test(s)) return "D";
+  if (/一般/.test(s)) return "B";
+  if (/会員/.test(s)) return "A";
+  return "";
+}
+function parseCells(s){
+  s = z2h(s); if (!s) return null;
+  const cells = [], rooms = [...ROOMS].sort((a, b) => b.name.length - a.name.length);
+  for (let part of s.split(/[／\/;；、\n]+/)) {
+    part = part.replace(/\s+/g, " ").trim(); if (!part) continue;
+    const R = rooms.find(r => part.startsWith(r.name) || part.startsWith(r.name.replace(/(ホール|和室)(.)/, "$1 $2")) || part.startsWith(r.short));
+    if (!R) return null;
+    const rest = part.slice(R.name.length);
+    const ss = /全日/.test(rest) ? SLOTS.map(x => x.id) : SLOTS.filter(x => rest.includes(x.name)).map(x => x.id);
+    if (!ss.length) return null;
+    ss.forEach(x => { const k = `${R.id}_${x}`; if (!cells.includes(k)) cells.push(k); });
+  }
+  return cells.length ? cells : null;
+}
+function parseStatus(s){
+  s = z2h(s);
+  if (/完了/.test(s)) return "done";
+  if (/支払済|支払い済|入金済/.test(s)) return "paid";
+  if (/却下|不可/.test(s)) return "rejected";
+  if (/取消|取り消|キャンセル/.test(s)) return "cancelled";
+  return "approved";
+}
+function headIndex(rows){
+  const hdr = rows[0].map(h => z2h(h));
+  const idx = n => hdr.indexOf(n);
+  const get = (r, ...ns) => { for (const n of ns) { const i = idx(n); if (i >= 0 && r[i] != null && String(r[i]).trim() !== "") return String(r[i]).trim(); } return ""; };
+  return {idx, get};
+}
+
+/* 申込の書き出し */
+function reqRow(r){
+  return [r.no, fmtTs(r.createdAt), r.source, r.date, `${r.cat} ${CATS[r.cat]?.name || ""}`, r.group, r.name, r.tel, r.email, r.purpose, r.people,
+    summaryText(r.cat, r.cells || [], 1), effFee(r), ST[r.status].adm, r.uid ? (USER_ST[S.users[r.uid]?.status]?.name || "") : (r.source || "窓口"),
+    r.payment?.method, r.payment?.paidAt, r.payment?.amount, r.payment?.receiptNo,
+    r.check ? fmtTs(r.check.at) : "", r.check?.checker, r.check ? r.check.damage + (r.check.damageNote ? "：" + r.check.damageNote : "") : "", r.note, r.adminMemo];
+}
+function exportCSV(all){
+  const list = reqList().filter(r => all || r.date.startsWith(S.month)).sort((a, b) => a.date.localeCompare(b.date));
+  downloadCSV(`小川会館_申込_${all ? "全件" : S.month}.csv`, [REQ_HEAD, ...list.map(reqRow)]);
+}
+function templateReq(){
+  const d = addDays(today(), 7);
+  downloadCSV("小川会館_申込_ひな形.csv", [REQ_HEAD,
+    ["", "", "", d, "A 登録会員", "小川書道の会", "佐藤 花子", "042-000-0000", "", "書道教室", "10", "和室A 午後", "", "確定・未払", "", "", "", "", "", "", "", "", "", ""],
+    ["", "", "", d, "D", "小川自治会", "鈴木 次郎", "042-000-0001", "", "役員会", "8", "会議室 全日", "300", "支払済", "", "現金", d, "300", "", "", "", "", "", ""]]);
+}
+/* 利用者・名簿の書き出し */
+function exportUsers(){
+  const rows = [USER_HEAD];
+  Object.values(S.users || {}).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).forEach(u => rows.push(["登録利用者", USER_ST[u.status]?.name || "", u.group, u.name, u.tel, u.email, `${u.cat} ${CATS[u.cat]?.name || ""}`,
+    u.createdAt ? ymd(new Date(u.createdAt)) : "", u.approvedAt ? ymd(new Date(u.approvedAt)) : "", u.source || ""]));
+  Object.values(S.roster || {}).forEach(r => rows.push(["名簿", "登録予定", r.group, r.name, r.tel, r.email, `${r.cat} ${CATS[r.cat]?.name || ""}`, "", "", r.note]));
+  downloadCSV("小川会館_利用者と名簿.csv", rows);
+}
+function templateUsers(){
+  downloadCSV("小川会館_名簿_ひな形.csv", [["団体名","代表者","電話","メール","利用区分","備考"],
+    ["小川老人会", "小川 一郎", "042-000-0001", "", "C", "毎週火曜に体操"], ["", "田中 美咲", "090-0000-0000", "tanaka@example.com", "B", ""]]);
+}
+
+/* 取り込み */
+async function importFile(input, kind){
+  const file = input.files[0]; input.value = ""; if (!file) return;
+  let rows; try { rows = await readCSVFile(file); } catch(e) { return toast("ファイルを読み込めませんでした"); }
+  if (rows.length < 2) return toast("見出しの行とデータの行が必要です");
+  const res = kind === "req" ? analyzeReqRows(rows) : analyzeUserRows(rows);
+  if (res.error) return toast(res.error);
+  S.imp = {kind, rows:res.rows, file:file.name};
+  showImport();
+}
+function analyzeReqRows(rows){
+  const {idx, get} = headIndex(rows);
+  if (idx("利用日") < 0 || idx("部屋・時間帯") < 0) return {error:"「利用日」「部屋・時間帯」の列が見つかりません。ひな形の見出しを使ってください"};
+  const nos = new Set(reqList().map(r => r.no)), taken = {};
+  Object.entries(S.slots || {}).forEach(([d, o]) => taken[d] = {...o});
+  return {rows:rows.slice(1).map((r, i) => {
+    const e = [], line = i + 2;
+    const date = parseDateCSV(get(r, "利用日")); if (!date) e.push("利用日が読めません");
+    const cat = parseCat(get(r, "利用区分")); if (!cat) e.push("利用区分が読めません");
+    const cells = parseCells(get(r, "部屋・時間帯")) || []; if (!cells.length) e.push("部屋・時間帯が読めません");
+    if (cat && cells.some(c => !FEES[cat][c.split("_")[0]])) e.push("この区分では全室を使えません");
+    const group = get(r, "団体名"), name = get(r, "代表者", "氏名");
+    if (!name && !group) e.push("代表者か団体名が必要です");
+    const no = z2h(get(r, "受付番号")).toUpperCase();
+    if (no && nos.has(no)) e.push("同じ受付番号がすでにあります");
+    let status = parseStatus(get(r, "状態"));
+    if (!e.length && active({status})) {
+      const t = taken[date] || {};
+      for (const c of cells) {
+        const [rm, sl] = c.split("_");
+        if (t[c] || (rm === "ALL" ? ROOM_IDS.some(x => t[`${x}_${sl}`]) : t[`ALL_${sl}`])) { e.push(`${ROOMS.find(x => x.id === rm).name} ${slotName(sl)}は予約済みです`); break; }
+      }
+      if (!e.length) { cells.forEach(c => t[c] = {}); taken[date] = t; }
+    }
+    if (no) nos.add(no);
+    if (e.length) return {line, ok:false, errors:e, show:[get(r, "利用日"), group || name, get(r, "部屋・時間帯")]};
+    const fee = calcFee(cat, cells, 1), feeNum = toNum(get(r, "使用料"));
+    const paidAmt = toNum(get(r, "入金額")), paidAt = parseDateCSV(get(r, "入金日"));
+    const hasPay = status === "paid" || status === "done" || paidAmt != null;
+    if (hasPay && status === "approved") status = "paid";
+    return {line, ok:true, show:[fmtDate(date), group || name, summaryText(cat, cells, 1)], data:{
+      no, date, cat, cells, group, name, tel:get(r, "電話"), email:get(r, "メール"), purpose:get(r, "利用目的") || "（CSV取込）", people:get(r, "人数"),
+      note:get(r, "連絡事項", "備考"), adminMemo:get(r, "管理メモ"), status, fee,
+      feeAdj:feeNum != null && feeNum !== fee.total ? {amount:feeNum, reason:"CSV取込時の金額"} : null,
+      payment:hasPay ? {method:get(r, "支払方法") || "現金", amount:paidAmt ?? feeNum ?? fee.total, paidAt:paidAt || date, receiptNo:get(r, "領収書番号"), at:Date.now()} : null}};
+  })};
+}
+function rosterMatchData(d){
+  const em = emailKey(d.email), tel = digits(d.tel);
+  const inUsers = Object.values(S.users || {}).some(u => (em && emailKey(u.email) === em) || (tel.length >= 6 && digits(u.tel) === tel));
+  const inRoster = Object.values(S.roster || {}).some(u => (em && emailKey(u.email) === em) || (tel.length >= 6 && digits(u.tel) === tel));
+  return {inUsers, inRoster};
+}
+function analyzeUserRows(rows){
+  const {idx, get} = headIndex(rows);
+  if (idx("代表者") < 0 && idx("氏名") < 0 && idx("団体名") < 0) return {error:"「代表者」または「団体名」の列が見つかりません。ひな形の見出しを使ってください"};
+  const seen = new Set();
+  return {rows:rows.slice(1).map((r, i) => {
+    const e = [], line = i + 2;
+    const d = {group:get(r, "団体名"), name:get(r, "代表者", "氏名"), tel:get(r, "電話"), email:get(r, "メール").toLowerCase(), cat:parseCat(get(r, "利用区分")), note:get(r, "備考")};
+    if (get(r, "種別") === "登録利用者") e.push("登録済みの利用者の行です");
+    if (!d.name && !d.group) e.push("代表者か団体名が必要です");
+    if (!d.cat) e.push("利用区分が読めません");
+    if (d.email && !emailKey(d.email)) e.push("メールアドレスが読めません");
+    if (!e.length) {
+      const m = rosterMatchData(d);
+      if (m.inUsers) e.push("同じメールか電話の利用者がすでに登録されています");
+      else if (m.inRoster) e.push("同じメールか電話の人が名簿にいます");
+      const k = emailKey(d.email) || (digits(d.tel).length >= 6 ? "t" + digits(d.tel) : "");
+      if (k && seen.has(k)) e.push("ファイル内で重複しています"); if (k) seen.add(k);
+    }
+    return {line, ok:!e.length, errors:e, show:[d.group || "（個人）", d.name, d.cat ? `${d.cat} ${CATS[d.cat].name}` : get(r, "利用区分")], data:e.length ? null : d};
+  })};
+}
+function showImport(){
+  const im = S.imp, ok = im.rows.filter(x => x.ok).length, ng = im.rows.length - ok, isReq = im.kind === "req";
+  const cols = isReq ? ["利用日","利用者","部屋・時間"] : ["団体名","代表者","区分"];
+  S.openId = null; S.openUid = null; S.sheetMode = "import";
+  showSheet(`<div class="sheet-head"><div><h2>${isReq ? "申込" : "名簿"}CSVの取り込み</h2><small>${esc(im.file)}：${im.rows.length}行（取り込める ${ok}件／取り込めない ${ng}件）</small></div><button class="x" onclick="closeSheet()" aria-label="閉じる">×</button></div>
+    <div class="scroll"><table class="list imp"><thead><tr><th>行</th>${cols.map(c => `<th>${c}</th>`).join("")}<th>結果</th></tr></thead><tbody>
+    ${im.rows.map(x => `<tr class="${x.ok ? "" : "ng"}"><td>${x.line}</td>${x.show.map(v => `<td>${esc(v)}</td>`).join("")}<td>${x.ok ? (isReq ? `<span class="pill ${ST[x.data.status].cls}">${ST[x.data.status].adm}</span> ${yen(x.data.feeAdj ? x.data.feeAdj.amount : x.data.fee.total)}` : "OK") : esc(x.errors.join("、"))}</td></tr>`).join("")}
+    </tbody></table></div>
+    <div class="btns"><button class="btn" ${ok ? "" : "disabled"} onclick="doImport(this)">${ok}件を取り込む</button><button class="btn ghost" onclick="closeSheet()">やめる</button></div>`);
+}
+async function doImport(btn){
+  const im = S.imp; if (!im) return; btn.disabled = true; btn.textContent = "取り込んでいます…";
+  const items = im.rows.filter(x => x.ok).map(x => x.data), now = Date.now();
+  try {
+    if (im.kind === "req") {
+      const nos = new Set(reqList().map(r => r.no)), A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", base = today().replace(/-/g, "").slice(2);
+      for (let i = 0; i < items.length; i += 40) {
+        const up = {};
+        items.slice(i, i + 40).forEach(d => {
+          let no = d.no;
+          while (!no || (nos.has(no) && no !== d.no)) no = `${base}-${[...Array(4)].map(() => A[Math.floor(Math.random()*A.length)]).join("")}`;
+          nos.add(no);
+          const id = genId(), req = clean({...d, no, createdAt:now, source:"CSV", uid:null, date2:null, days:1, approvedAt:now,
+            feeAdj:d.feeAdj || undefined, payment:d.payment || undefined});
+          const part = buildUpdate(id, req);
+          if (!active(req)) Object.keys(part).forEach(k => { if (k.startsWith("slots/")) delete part[k]; });
+          Object.assign(up, part);
+        });
+        await store.update(up);
+      }
+    } else {
+      const up = {};
+      items.forEach(d => {
+        const id = genId(); up[`roster/${id}`] = clean({...d, importedAt:now});
+        const k = emailKey(d.email); if (k) up[`rosterByEmail/${k}`] = clean({cat:d.cat, group:d.group, name:d.name, tel:d.tel, email:d.email, rosterId:id});
+      });
+      await store.update(up);
+    }
+    S.imp = null; closeSheet(); render(); toast(`${items.length}件を取り込みました`);
+  } catch(e) { console.warn(e); btn.disabled = false; btn.textContent = "もう一度取り込む"; toast("取り込めませんでした：" + (e.code || e.message)); }
+}
+
+/* 名簿 */
+function rosterMatch(u){
+  const em = emailKey(u.email), tel = digits(u.tel);
+  return Object.entries(S.roster || {}).map(([id, r]) => ({id, ...r}))
+    .filter(r => (em && emailKey(r.email) === em) || (tel.length >= 6 && digits(r.tel) === tel));
+}
+function rosterHint(u){
+  const m = rosterMatch(u); if (!m.length) return "";
+  return `<div class="note ok" style="margin:0 0 12px">名簿に一致：${m.map(r => `${esc(r.group || "（個人）")} ${esc(r.name)}（${r.cat} ${esc(CATS[r.cat]?.name || "")}）`).join("、")}${u.status !== "active" ? "。区分を名簿に合わせています。" : ""}</div>`;
+}
+function rosterSection(){
+  const list = Object.entries(S.roster || {}).map(([id, r]) => ({id, ...r})).sort((a, b) => (a.group || a.name).localeCompare(b.group || b.name, "ja"));
+  return `<section class="card"><h2>名簿<small>登録予定 ${list.length}件</small></h2>
+    <p class="hint" style="margin-top:0">設定タブの「名簿CSVを取り込む」で追加します。名簿のメールアドレスでログインした人は自動で登録済みになります。</p>
+    ${list.length ? `<details class="more-box"><summary>名簿を見る</summary><table class="list"><tbody>${list.map(r => `<tr><td>${esc(r.group || "（個人）")}<br><small style="color:var(--sub)">${esc(r.name)}・${esc(r.tel || "")} ${esc(r.email || "")}</small></td><td>${r.cat}</td>
+      <td class="r"><button class="btn sm ghost" onclick="deleteRoster('${r.id}')">削除</button></td></tr>`).join("")}</tbody></table>
+      <div class="btns"><button class="btn sm ghost" onclick="deleteRoster('*')">名簿をすべて削除</button></div></details>` : ""}</section>`;
+}
+function deleteRoster(id){
+  const list = id === "*" ? Object.entries(S.roster || {}).map(([k, r]) => ({id:k, ...r})) : [{id, ...S.roster[id]}];
+  if (!confirm(id === "*" ? `名簿の${list.length}件をすべて削除しますか？` : `${list[0].group || list[0].name} を名簿から削除しますか？`)) return;
+  const up = {};
+  list.forEach(r => { up[`roster/${r.id}`] = null; const k = emailKey(r.email); if (k && S.roster) up[`rosterByEmail/${k}`] = null; });
+  act(up, "名簿から削除しました");
 }
 
 /* ===== お試しモード用 ===== */
 async function addSamples(){
-  const t = today(), mk = async (date, cat, cells, group, name, purpose, status, extra = {}) => {
+  const t = today(), now = Date.now();
+  const mk = async (uid, date, cat, cells, prof, purpose, status, extra = {}) => {
     const id = genId(), no = await genNo(), fee = calcFee(cat, cells, 1);
-    const req = clean({no, createdAt:Date.now(), source:"Web", cat, date, date2:null, cells, days:1, fee, group, name, tel:"042-000-0000", purpose, people:"12", status, ...extra});
+    const req = clean({no, createdAt:now, source:"Web", uid, cat, date, date2:null, cells, days:1, fee, ...prof, purpose, people:"12", status, ...extra});
     await store.update(buildUpdate(id, req));
   };
-  await mk(addDays(t, 1), "C", ["HA_am","HA_pm","HA_ev"], "小川老人会", "小川 一郎", "健康体操", "applied");
-  await mk(addDays(t, 2), "A", ["WA_pm"], "小川書道の会", "佐藤 花子", "書道教室", "approved", {approvedAt:Date.now()});
-  await mk(t, "D", ["KG_ev"], "小川自治会", "鈴木 次郎", "役員会", "paid", {payment:{method:"現金", amount:100, paidAt:t, receiptNo:nextReceiptNo(), at:Date.now()}});
-  await mk(addDays(t, 5), "B", ["HB_am","HB_pm"], "", "田中 美咲", "ピアノ発表会の練習", "applied");
+  const p1 = {group:"小川老人会", name:"小川 一郎", tel:"042-000-0001", email:""};
+  const p2 = {group:"小川書道の会", name:"佐藤 花子", tel:"042-000-0002", email:""};
+  await store.update({"users/sample-1":{...p1, cat:"C", status:"pending", createdAt:now},
+    "users/sample-2":{...p2, cat:"A", status:"active", createdAt:now - 864e5*30, approvedAt:now - 864e5*29},
+    "adminRequests/sample-3":{name:"鈴木 次郎", role:"会計", email:"suzuki@example.com", memo:"会館の鍵当番", status:"pending", at:now}});
+  await mk("sample-1", addDays(t, 1), "C", ["HA_am","HA_pm","HA_ev"], p1, "健康体操", "tentative");
+  await mk("sample-2", addDays(t, 2), "A", ["WA_pm"], p2, "書道教室", "approved", {approvedAt:now});
+  await mk("sample-2", t, "A", ["KG_ev"], p2, "役員会", "paid", {approvedAt:now, payment:{method:"現金", amount:300, paidAt:t, receiptNo:nextReceiptNo(), at:now}});
   toast("サンプルを入れました");
 }
-function resetDemo(){ if (!confirm("お試しデータをすべて消します。よろしいですか？")) return; demoTree = {}; try { localStorage.removeItem(DEMO_KEY); } catch(e) {} store.update({}); S.slots = {}; S.requests = {}; closeSheet(); render(); toast("消去しました"); }
+function resetDemo(){
+  if (!confirm("お試しデータをすべて消します。よろしいですか？")) return;
+  demoTree = {}; try { localStorage.removeItem(DEMO_KEY); localStorage.removeItem("ogawaDemoUser"); } catch(e) {}
+  S.slots = {}; closeSheet(); watchUser(null); store.update({}); toast("消去しました");
+}
 
 /* ===== 起動 ===== */
 function init(){
@@ -992,18 +1581,15 @@ function init(){
     firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.database(); auth = firebase.auth();
     auth.getRedirectResult().catch(() => {});
-    auth.onAuthStateChanged(async u => {
-      S.user = u;
-      if (!u) { try { await auth.signInAnonymously(); } catch(e) { console.warn(e); } return; }
-      if (u.isAnonymous) return setAdmin(false);
-      const ok = await store.get(`admins/${u.uid}`).catch(() => null);
-      setAdmin(!!ok);
-    });
+    auth.onAuthStateChanged(u => watchUser(u && !u.isAnonymous ? u : null));
+  } else {
+    let u = null; try { u = JSON.parse(localStorage.getItem("ogawaDemoUser") || "null"); } catch(e) {}
+    watchUser(u);
   }
   store.on("slots", v => { S.slots = v || {}; if (S.view === "board") render(); });
-  render();
 }
 init();
+
 </script>
 </body>
 </html>
