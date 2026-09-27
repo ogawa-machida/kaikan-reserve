@@ -1,7 +1,7 @@
 // 小川会館 予約受付：サービスワーカー（network-first）
 // 常に最新を取りに行き、つながらないときだけ保存しておいた画面を出します。
-const CACHE = "ogawa-hall-v1";
-const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
+const CACHE = "ogawa-hall-v2";
+const SHELL = ["./", "./index.html", "./manifest.webmanifest"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
