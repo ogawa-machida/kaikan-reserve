@@ -899,7 +899,7 @@ function statusBlock(st){
 }
 function viewMy(){
   if (!S.user) return `<section class="card"><h2>マイページ</h2><p style="margin-top:0">ログインすると、使用団体の登録状況と自分の申込を確認できます。</p>
-    <button class="btn" onclick="signIn()">ログイン・アカウント作成</button></section>` + lookupCard();
+    <button class="btn" onclick="signIn()">ログイン・アカウント作成</button></section>` + lookupCard() + pwaCard();
   const os = myOrgs();
   let h = `<section class="card"><h2>使用団体<small>${os.length}件</small></h2>`;
   if (!os.length) h += `<p style="margin-top:0">まだ使用団体の登録はありません。はじめての申込の内容で登録を申請します。</p><button class="btn" onclick="go('board')">空き状況から申し込む</button>`;
@@ -911,7 +911,7 @@ function viewMy(){
   h += `<p class="hint">${esc(S.user.email || S.user.displayName || "")} でログイン中　<button class="link" onclick="signOut()">ログアウト</button></p></section>`;
   const list = Object.entries(S.myReqs || {}).map(([id, r]) => ({id, ...r})).sort((a, b) => b.date.localeCompare(a.date));
   h += `<section class="card"><h2>自分の申込</h2>${list.length ? list.map(myCard).join("") : `<div class="empty">申込はまだありません。</div>`}
-    <p class="hint">取消・変更は${esc(HALL.contact)}。</p></section>`;
+    <p class="hint">取消・変更は${esc(HALL.contact)}。</p></section>` + pwaCard();
   return h;
 }
 function myCard(r){
@@ -1677,6 +1677,27 @@ function init(){
 init();
 
 /* ===== アプリとしてインストール ===== */
+function pwaCard(){
+  return `<section class="card"><details class="more-box" style="margin:0"><summary>アプリとしてインストールできないとき</summary>
+    <p class="hint">必要なファイルが GitHub に置かれているかを確かめます。</p>
+    <button class="btn ghost sm" onclick="checkPWA()">確認する</button><div id="pwares">${S.pwaRes || ""}</div></details></section>`;
+}
+async function checkPWA(){
+  const rows = [];
+  const probe = async (file, label) => {
+    try { const r = await fetch(file + "?t=" + Date.now(), {cache:"no-store"}); rows.push([label, r.ok, r.ok ? "あり" : `見つかりません（${r.status}）`]); return r.ok ? r : null; }
+    catch(e) { rows.push([label, false, "読み込めません"]); return null; }
+  };
+  const mr = await probe("manifest.webmanifest", "manifest.webmanifest");
+  if (mr) { try { const m = await mr.json(); rows.push(["アイコン", (m.icons || []).length >= 2, (m.icons || []).length >= 2 ? `${m.icons.length}個` : "ありません（古いファイルです）"]); } catch(e) { rows.push(["マニフェストの中身", false, "読めません"]); } }
+  await probe("sw.js", "sw.js");
+  const reg = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration().catch(() => null) : null;
+  rows.push(["サービスワーカー", !!reg, reg ? "動いています" : "まだ動いていません（再読み込みしてください）"]);
+  rows.push(["表示", true, matchMedia("(display-mode: standalone)").matches ? "アプリとして開いています" : "ブラウザで開いています"]);
+  S.pwaRes = `<table class="list" style="margin-top:10px"><tbody>${rows.map(([a, ok, t]) => `<tr><td>${esc(a)}</td><td class="r" style="color:${ok ? "var(--paid)" : "var(--danger)"};font-weight:700">${ok ? "OK" : "NG"}</td><td>${esc(t)}</td></tr>`).join("")}</tbody></table>
+    <p class="hint">NG があるときは、index.html と同じ場所にそのファイルを置いてください。すべて OK なのにインストールできないときは、Chrome のタブを閉じて開き直してから試してください。</p>`;
+  const el = $("#pwares"); if (el) el.innerHTML = S.pwaRes;
+}
 let deferredPrompt = null;
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(e => console.warn("SW", e)));
